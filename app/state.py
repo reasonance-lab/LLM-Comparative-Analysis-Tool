@@ -224,20 +224,14 @@ class ComparisonState(rx.State):
         """Helper to fetch response from OpenAI."""
         client = cast(openai.OpenAI, self._openai_client)
         try:
+            full_prompt = f"You are a helpful assistant that generates Python code. Your goal is to collaborate with another AI to converge on a single, optimal solution. Focus on functional correctness and logical structure over stylistic differences.\n\nUser prompt: {current_prompt}"
             response = await asyncio.to_thread(
-                client.chat.completions.create,
+                client.responses.create,
                 model="gpt-5-codex",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that generates Python code. Your goal is to collaborate with another AI to converge on a single, optimal solution. Focus on functional correctness and logical structure over stylistic differences.",
-                    },
-                    {"role": "user", "content": current_prompt},
-                ],
-                max_tokens=2048,
-                temperature=0.7,
+                input=full_prompt,
+                max_output_tokens=2048,
             )
-            return response.choices[0].message.content or "No response from OpenAI."
+            return response.output_text or "No response from OpenAI."
         except Exception as e:
             logging.exception(f"OpenAI API error: {e}")
             return f"Error: Could not get response from OpenAI. Details: {e}"

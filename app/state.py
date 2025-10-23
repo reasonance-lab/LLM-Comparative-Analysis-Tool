@@ -760,42 +760,58 @@ Instructions:
         """Helper to fetch response from Anthropic Claude with optional extended thinking."""
         client = cast(anthropic.Anthropic, self._anthropic_client)
         try:
-            system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
-            api_params = {
-                "model": self.claude_model,
-                "system": [
-                    {
-                        "type": "text",
-                        "text": system_message,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                "max_tokens": self.max_tokens_claude,
-                "messages": [{"role": "user", "content": current_prompt}],
-                "temperature": self.temperature,
-            }
+            return await asyncio.to_thread(
+                self._execute_claude_stream, current_prompt, client
+            )
+        except Exception as e:
+            logging.exception(f"Anthropic API error: {e}")
+            return None
+
+    def _execute_claude_stream(
+        self, current_prompt: str, client: anthropic.Anthropic
+    ) -> str | None:
+        """Synchronously executes the Claude stream and collects the response."""
+        system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
+        api_params = {
+            "model": self.claude_model,
+            "system": [
+                {
+                    "type": "text",
+                    "text": system_message,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            "max_tokens": self.max_tokens_claude,
+            "messages": [{"role": "user", "content": current_prompt}],
+            "temperature": self.temperature,
+        }
+        response_text = ""
+        thinking_text = ""
+        try:
             if self.extended_thinking_enabled:
                 api_params["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": self.thinking_budget_tokens,
                 }
-            response_text = ""
-            thinking_text = ""
-            async with client.messages.stream(**api_params) as stream:
-                async for event in stream:
-                    if (
-                        event.type == "content_block_delta"
-                        and event.delta.type == "text_delta"
-                    ):
-                        response_text += event.delta.text
-                    elif event.type == "thinking_delta":
-                        if hasattr(event.delta, "thinking"):
-                            thinking_text += event.delta.thinking
+                with client.messages.stream(**api_params) as stream:
+                    for event in stream:
+                        if (
+                            event.type == "content_block_delta"
+                            and event.delta.type == "text_delta"
+                        ):
+                            response_text += event.delta.text
+                        elif event.type == "thinking_delta":
+                            if hasattr(event.delta, "thinking"):
+                                thinking_text += event.delta.thinking
+            else:
+                with client.messages.stream(**api_params) as stream:
+                    for text in stream.text_stream:
+                        response_text += text
             final_response = response_text.strip()
             if not final_response:
                 logging.warning("Claude returned an empty response.")
                 return None
             return final_response
         except Exception as e:
-            logging.exception(f"Anthropic API error: {e}")
+            logging.exception(f"Error during Claude stream execution: {e}")
             return None

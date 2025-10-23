@@ -45,7 +45,7 @@ class ComparisonState(rx.State):
     convergence_threshold: float = 0.9
     max_iterations: int = 10
     temperature: float = 0.7
-    openai_model: str = "gpt-5-mini-2025-08-07"
+    openai_model: str = "gpt-5-codex"
     claude_model: str = "claude-sonnet-4-5-20250929"
     openai_models: list[str] = [
         "gpt-5-codex",
@@ -60,8 +60,9 @@ class ComparisonState(rx.State):
     reasoning_effort: str = "medium"
     reasoning_efforts: list[str] = ["medium", "high"]
     extended_thinking_enabled: bool = False
-    thinking_budget_tokens: int = 2000
-    thinking_budget_options: list[int] = [1000, 2000, 5000, 10000]
+    thinking_budget_tokens: int = 10000
+    thinking_budget_options: list[int] = [8000, 10000, 16000]
+    max_tokens_claude: int = 64000
     show_settings: bool = False
     show_diff_viewer: bool = False
     selected_iteration_for_diff: int = 0
@@ -263,6 +264,14 @@ class ComparisonState(rx.State):
             self.thinking_budget_tokens = int(budget)
         except (ValueError, TypeError) as e:
             logging.exception(f"Error setting thinking budget: {e}")
+
+    @rx.event
+    def update_max_tokens_claude(self, value: str):
+        """Update Claude's max_tokens from slider."""
+        try:
+            self.max_tokens_claude = int(value)
+        except (ValueError, TypeError) as e:
+            logging.exception(f"Error updating Claude max tokens: {e}")
 
     @rx.event
     def select_iteration_for_diff(self, iteration: str):
@@ -755,9 +764,10 @@ Instructions:
             api_params = {
                 "model": self.claude_model,
                 "system": system_message,
-                "max_tokens": 2048,
+                "max_tokens": self.max_tokens_claude,
                 "messages": [{"role": "user", "content": current_prompt}],
                 "temperature": self.temperature,
+                "cache_control": {"type": "ephemeral"},
             }
             if self.extended_thinking_enabled:
                 api_params["thinking"] = {

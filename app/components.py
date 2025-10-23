@@ -156,6 +156,36 @@ def settings_panel() -> rx.Component:
                         ),
                         class_name="mt-4",
                     ),
+                    rx.el.div(
+                        rx.el.label(
+                            "Claude Max Tokens",
+                            class_name="text-sm font-semibold text-gray-700 mb-2 block",
+                        ),
+                        rx.el.div(
+                            rx.el.span(
+                                ComparisonState.max_tokens_claude.to_string(),
+                                class_name="text-lg font-bold text-indigo-600",
+                            ),
+                            class_name="mb-2",
+                        ),
+                        rx.el.input(
+                            type="range",
+                            key=ComparisonState.max_tokens_claude,
+                            default_value=ComparisonState.max_tokens_claude,
+                            min=1000,
+                            max=80000,
+                            step=1000,
+                            on_change=ComparisonState.update_max_tokens_claude.throttle(
+                                50
+                            ),
+                            class_name="w-full",
+                        ),
+                        rx.el.p(
+                            "Maximum tokens for Claude's response (1k-80k)",
+                            class_name="text-xs text-gray-500 mt-1",
+                        ),
+                        class_name="mt-4",
+                    ),
                     class_name="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200",
                 ),
                 rx.el.div(

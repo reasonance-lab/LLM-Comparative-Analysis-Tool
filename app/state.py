@@ -735,8 +735,8 @@ Instructions:
             if hasattr(response, "output") and response.output:
                 for item in response.output:
                     if item.type == "message":
-                        for content_block in item.message.content:
-                            if content_block.type == "text":
+                        for content_block in item.content:
+                            if content_block.type == "output_text":
                                 response_text += content_block.text
             response_text = response_text.strip()
             if not response_text:

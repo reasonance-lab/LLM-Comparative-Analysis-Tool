@@ -70,123 +70,127 @@ def settings_panel() -> rx.Component:
                     ),
                     rx.el.div(
                         rx.el.div(
-                            rx.el.label(
-                                "OpenAI Model",
-                                class_name="text-sm font-semibold text-gray-700 mb-2 block",
-                            ),
-                            rx.select(
-                                ComparisonState.openai_models_options,
-                                value=ComparisonState.openai_model,
-                                on_change=ComparisonState.set_openai_model,
-                                class_name="w-full",
-                            ),
-                            class_name="flex-1",
-                        ),
-                        rx.el.div(
-                            rx.el.label(
-                                "Claude Model",
-                                class_name="text-sm font-semibold text-gray-700 mb-2 block",
-                            ),
-                            rx.select(
-                                ComparisonState.claude_models_options,
-                                value=ComparisonState.claude_model,
-                                on_change=ComparisonState.set_claude_model,
-                                class_name="w-full",
-                            ),
-                            class_name="flex-1",
-                        ),
-                        class_name="grid md:grid-cols-2 gap-4 mb-4",
-                    ),
-                    rx.el.div(
-                        rx.el.label(
-                            "OpenAI Reasoning Effort",
-                            class_name="text-sm font-semibold text-gray-700 mb-2 block",
-                        ),
-                        rx.select(
-                            ComparisonState.reasoning_efforts_options,
-                            value=ComparisonState.reasoning_effort,
-                            on_change=ComparisonState.set_reasoning_effort,
-                            class_name="w-full md:w-1/2",
-                        ),
-                        rx.el.p(
-                            "Higher effort = more thorough reasoning (GPT-5 models only)",
-                            class_name="text-xs text-gray-500 mt-1",
-                        ),
-                        class_name="mt-4",
-                    ),
-                    rx.el.div(
-                        rx.el.label(
-                            "Claude Extended Thinking",
-                            class_name="text-sm font-semibold text-gray-700 mb-2 block",
-                        ),
-                        rx.el.div(
-                            rx.switch(
-                                checked=ComparisonState.extended_thinking_enabled,
-                                on_change=ComparisonState.toggle_extended_thinking,
-                            ),
-                            rx.el.span(
-                                rx.cond(
-                                    ComparisonState.extended_thinking_enabled,
-                                    "Enabled",
-                                    "Disabled",
-                                ),
-                                class_name="ml-3 text-sm text-gray-700 font-medium",
-                            ),
-                            class_name="flex items-center",
-                        ),
-                        rx.cond(
-                            ComparisonState.extended_thinking_enabled,
                             rx.el.div(
                                 rx.el.label(
-                                    "Thinking Budget (tokens)",
-                                    class_name="text-xs font-semibold text-gray-600 mb-1 block mt-3",
+                                    "OpenAI Model",
+                                    class_name="text-sm font-semibold text-gray-700 mb-2 block",
                                 ),
                                 rx.select(
-                                    ComparisonState.thinking_budget_options_str,
-                                    value=ComparisonState.thinking_budget_tokens.to_string(),
-                                    on_change=ComparisonState.set_thinking_budget,
-                                    class_name="w-full md:w-1/2",
+                                    ComparisonState.openai_models_options,
+                                    value=ComparisonState.openai_model,
+                                    on_change=ComparisonState.set_openai_model,
+                                    class_name="w-full",
                                 ),
-                                class_name="mt-2",
+                                class_name="mb-4",
                             ),
-                        ),
-                        rx.el.p(
-                            "Shows Claude's reasoning process before the response",
-                            class_name="text-xs text-gray-500 mt-1",
-                        ),
-                        class_name="mt-4",
-                    ),
-                    rx.el.div(
-                        rx.el.label(
-                            "Claude Max Tokens",
-                            class_name="text-sm font-semibold text-gray-700 mb-2 block",
+                            rx.el.div(
+                                rx.el.label(
+                                    "OpenAI Reasoning Effort",
+                                    class_name="text-sm font-semibold text-gray-700 mb-2 block",
+                                ),
+                                rx.select(
+                                    ComparisonState.reasoning_efforts_options,
+                                    value=ComparisonState.reasoning_effort,
+                                    on_change=ComparisonState.set_reasoning_effort,
+                                    class_name="w-full",
+                                ),
+                                rx.el.p(
+                                    "Higher effort = more thorough reasoning (GPT-5 models only)",
+                                    class_name="text-xs text-gray-500 mt-1",
+                                ),
+                            ),
+                            class_name="flex flex-col",
                         ),
                         rx.el.div(
-                            rx.el.span(
-                                ComparisonState.max_tokens_claude.to_string(),
-                                class_name="text-lg font-bold text-indigo-600",
+                            rx.el.div(
+                                rx.el.label(
+                                    "Claude Model",
+                                    class_name="text-sm font-semibold text-gray-700 mb-2 block",
+                                ),
+                                rx.select(
+                                    ComparisonState.claude_models_options,
+                                    value=ComparisonState.claude_model,
+                                    on_change=ComparisonState.set_claude_model,
+                                    class_name="w-full",
+                                ),
+                                class_name="mb-4",
                             ),
-                            class_name="mb-2",
-                        ),
-                        rx.el.input(
-                            type="range",
-                            key=ComparisonState.max_tokens_claude,
-                            default_value=ComparisonState.max_tokens_claude,
-                            min=1000,
-                            max=80000,
-                            step=1000,
-                            on_change=ComparisonState.update_max_tokens_claude.throttle(
-                                50
+                            rx.el.div(
+                                rx.el.label(
+                                    "Claude Extended Thinking",
+                                    class_name="text-sm font-semibold text-gray-700 mb-2 block",
+                                ),
+                                rx.el.div(
+                                    rx.switch(
+                                        checked=ComparisonState.extended_thinking_enabled,
+                                        on_change=ComparisonState.toggle_extended_thinking,
+                                    ),
+                                    rx.el.span(
+                                        rx.cond(
+                                            ComparisonState.extended_thinking_enabled,
+                                            "Enabled",
+                                            "Disabled",
+                                        ),
+                                        class_name="ml-3 text-sm text-gray-700 font-medium",
+                                    ),
+                                    class_name="flex items-center",
+                                ),
+                                rx.el.p(
+                                    "Shows Claude's reasoning process before the response",
+                                    class_name="text-xs text-gray-500 mt-1",
+                                ),
+                                rx.cond(
+                                    ComparisonState.extended_thinking_enabled,
+                                    rx.el.div(
+                                        rx.el.label(
+                                            "Thinking Budget (tokens)",
+                                            class_name="text-xs font-semibold text-gray-600 mb-1 block mt-3",
+                                        ),
+                                        rx.select(
+                                            ComparisonState.thinking_budget_options_str,
+                                            value=ComparisonState.thinking_budget_tokens.to_string(),
+                                            on_change=ComparisonState.set_thinking_budget,
+                                            class_name="w-full",
+                                        ),
+                                        class_name="mt-2",
+                                    ),
+                                ),
+                                class_name="mb-4",
                             ),
-                            class_name="w-full",
+                            rx.el.div(
+                                rx.el.label(
+                                    "Claude Max Tokens",
+                                    class_name="text-sm font-semibold text-gray-700 mb-2 block",
+                                ),
+                                rx.el.div(
+                                    rx.el.span(
+                                        ComparisonState.max_tokens_claude.to_string(),
+                                        class_name="text-lg font-bold text-indigo-600",
+                                    ),
+                                    class_name="mb-2",
+                                ),
+                                rx.el.input(
+                                    type="range",
+                                    key=ComparisonState.max_tokens_claude,
+                                    default_value=ComparisonState.max_tokens_claude,
+                                    min=1000,
+                                    max=80000,
+                                    step=1000,
+                                    on_change=ComparisonState.update_max_tokens_claude.throttle(
+                                        50
+                                    ),
+                                    class_name="w-full",
+                                ),
+                                rx.el.p(
+                                    "Maximum tokens for Claude's response (1k-80k)",
+                                    class_name="text-xs text-gray-500 mt-1",
+                                ),
+                            ),
+                            class_name="flex flex-col",
                         ),
-                        rx.el.p(
-                            "Maximum tokens for Claude's response (1k-80k)",
-                            class_name="text-xs text-gray-500 mt-1",
-                        ),
-                        class_name="mt-4",
+                        class_name="grid md:grid-cols-2 gap-8 mb-4",
                     ),
-                    class_name="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200",
+                    class_name="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200",
                 ),
                 rx.el.div(
                     rx.el.h4(

@@ -73,13 +73,17 @@ class ComparisonState(rx.State):
             self.converged = False
             self.history = []
             self._initialize_clients()
-        openai_task = self._fetch_openai(self.prompt)
-        claude_task = self._fetch_claude(self.prompt)
         try:
+            openai_task = self._fetch_openai(self.prompt)
+            claude_task = self._fetch_claude(self.prompt)
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
             if openai_res is None or claude_res is None:
                 async with self:
                     self.is_loading = False
+                if openai_res is None:
+                    yield rx.toast("OpenAI failed to respond.", duration=5000)
+                if claude_res is None:
+                    yield rx.toast("Claude failed to respond.", duration=5000)
                 return
             similarity = self._cosine_similarity(openai_res, claude_res)
             async with self:
@@ -120,12 +124,21 @@ class ComparisonState(rx.State):
                 other_model_response=openai_previous,
             )
         openai_task = self._fetch_openai(openai_new_prompt)
-        claude_task = self._fetch_claude(claude_new_prompt)
         try:
+            openai_task = self._fetch_openai(openai_new_prompt)
+            claude_task = self._fetch_claude(claude_new_prompt)
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
             async with self:
                 if openai_res is None or claude_res is None:
                     self.is_iterating = False
+                    if openai_res is None:
+                        yield rx.toast(
+                            "OpenAI failed to respond during iteration.", duration=5000
+                        )
+                    if claude_res is None:
+                        yield rx.toast(
+                            "Claude failed to respond during iteration.", duration=5000
+                        )
                     return
                 similarity = self._cosine_similarity(openai_res, claude_res)
                 new_iteration: ModelResponse = {
@@ -175,13 +188,21 @@ class ComparisonState(rx.State):
                     your_previous_response=claude_previous,
                     other_model_response=openai_previous,
                 )
-            openai_task = self._fetch_openai(openai_new_prompt)
-            claude_task = self._fetch_claude(claude_new_prompt)
             try:
+                openai_task = self._fetch_openai(openai_new_prompt)
+                claude_task = self._fetch_claude(claude_new_prompt)
                 openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
                 if openai_res is None or claude_res is None:
                     async with self:
                         self.automated_running = False
+                    if openai_res is None:
+                        yield rx.toast(
+                            "OpenAI failed during automated cycle.", duration=5000
+                        )
+                    if claude_res is None:
+                        yield rx.toast(
+                            "Claude failed during automated cycle.", duration=5000
+                        )
                     break
                 new_similarity = self._cosine_similarity(openai_res, claude_res)
                 async with self:
@@ -246,22 +267,21 @@ class ComparisonState(rx.State):
         try:
             full_prompt = f"You are a helpful assistant that generates Python code. Your goal is to collaborate with another AI to converge on a single, optimal solution. Focus on functional correctness and logical structure over stylistic differences.\n\nUser prompt: {current_prompt}"
             response = await asyncio.to_thread(
-                client.responses.create,
-                model="gpt-5-codex",
-                input=full_prompt,
-                max_output_tokens=2048,
+                client.chat.completions.create,
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": full_prompt}],
+                max_tokens=2048,
             )
-            response_text = response.output_text.strip() if response.output_text else ""
+            response_text = (
+                response.choices[0].message.content.strip() if response.choices else ""
+            )
             if not response_text:
-                yield rx.toast("OpenAI returned an empty response.", duration=5000)
-                yield "Error: OpenAI returned an empty response."
-                return
-            yield response_text
-            return
+                logging.warning("OpenAI returned an empty response.")
+                return None
+            return response_text
         except Exception as e:
             logging.exception(f"OpenAI API error: {e}")
-            yield rx.toast(f"OpenAI API Error: {e}", duration=5000)
-            return
+            return None
 
     async def _fetch_claude(self, current_prompt: str) -> str | None:
         """Helper to fetch response from Anthropic Claude."""
@@ -269,7 +289,7 @@ class ComparisonState(rx.State):
         try:
             message = await asyncio.to_thread(
                 client.messages.create,
-                model="claude-3-sonnet-20240229",
+                model="claude-sonnet-4-5-20250929",
                 system="You are a helpful assistant that generates Python code. Your goal is to collaborate with another AI to converge on a single, optimal solution. Focus on functional correctness and logical structure over stylistic differences.",
                 max_tokens=2048,
                 messages=[{"role": "user", "content": current_prompt}],
@@ -277,12 +297,9 @@ class ComparisonState(rx.State):
             )
             response_text = message.content[0].text.strip() if message.content else ""
             if not response_text:
-                yield rx.toast("Claude returned an empty response.", duration=5000)
-                yield "Error: Claude returned an empty response."
-                return
-            yield response_text
-            return
+                logging.warning("Claude returned an empty response.")
+                return None
+            return response_text
         except Exception as e:
             logging.exception(f"Anthropic API error: {e}")
-            yield rx.toast(f"Claude API Error: {e}", duration=5000)
-            return
+            return None

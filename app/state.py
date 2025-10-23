@@ -77,6 +77,10 @@ class ComparisonState(rx.State):
         claude_task = self._fetch_claude(self.prompt)
         try:
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
+            if openai_res is None or claude_res is None:
+                async with self:
+                    self.is_loading = False
+                return
             similarity = self._cosine_similarity(openai_res, claude_res)
             async with self:
                 initial_responses: ModelResponse = {
@@ -90,7 +94,7 @@ class ComparisonState(rx.State):
                     yield ComparisonState.run_automated_cycle
         except Exception as e:
             logging.exception(f"Error fetching initial responses: {e}")
-            yield rx.toast(f"An API error occurred: {e}", duration=5000)
+            yield rx.toast(f"An unexpected error occurred: {e}", duration=5000)
         finally:
             async with self:
                 self.is_loading = False
@@ -120,6 +124,9 @@ class ComparisonState(rx.State):
         try:
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
             async with self:
+                if openai_res is None or claude_res is None:
+                    self.is_iterating = False
+                    return
                 similarity = self._cosine_similarity(openai_res, claude_res)
                 new_iteration: ModelResponse = {
                     "iteration": len(self.history) + 1,
@@ -131,7 +138,7 @@ class ComparisonState(rx.State):
         except Exception as e:
             logging.exception(f"Error during iteration: {e}")
             yield rx.toast(
-                f"An API error occurred during iteration: {e}", duration=5000
+                f"An unexpected error occurred during iteration: {e}", duration=5000
             )
         finally:
             async with self:
@@ -172,6 +179,10 @@ class ComparisonState(rx.State):
             claude_task = self._fetch_claude(claude_new_prompt)
             try:
                 openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
+                if openai_res is None or claude_res is None:
+                    async with self:
+                        self.automated_running = False
+                    break
                 new_similarity = self._cosine_similarity(openai_res, claude_res)
                 async with self:
                     new_iteration: ModelResponse = {
@@ -185,7 +196,9 @@ class ComparisonState(rx.State):
                 async with self:
                     self.automated_running = False
                 logging.exception(f"Error during automated iteration: {e}")
-                yield rx.toast(f"API error in automated cycle: {e}", duration=5000)
+                yield rx.toast(
+                    f"Unexpected error in automated cycle: {e}", duration=5000
+                )
                 break
             yield
         async with self:
@@ -209,6 +222,13 @@ class ComparisonState(rx.State):
             text2
         ):
             return 0.0
+        if (
+            not text1
+            or not text2
+            or text1.startswith("Error:")
+            or text2.startswith("Error:")
+        ):
+            return 0.0
         vec1 = Counter(text1.split())
         vec2 = Counter(text2.split())
         intersection = set(vec1.keys()) & set(vec2.keys())
@@ -220,7 +240,7 @@ class ComparisonState(rx.State):
             return 0.0
         return float(numerator) / denominator
 
-    async def _fetch_openai(self, current_prompt: str) -> str:
+    async def _fetch_openai(self, current_prompt: str) -> str | None:
         """Helper to fetch response from OpenAI."""
         client = cast(openai.OpenAI, self._openai_client)
         try:
@@ -231,24 +251,38 @@ class ComparisonState(rx.State):
                 input=full_prompt,
                 max_output_tokens=2048,
             )
-            return response.output_text or "No response from OpenAI."
+            response_text = response.output_text.strip() if response.output_text else ""
+            if not response_text:
+                yield rx.toast("OpenAI returned an empty response.", duration=5000)
+                yield "Error: OpenAI returned an empty response."
+                return
+            yield response_text
+            return
         except Exception as e:
             logging.exception(f"OpenAI API error: {e}")
-            return f"Error: Could not get response from OpenAI. Details: {e}"
+            yield rx.toast(f"OpenAI API Error: {e}", duration=5000)
+            return
 
-    async def _fetch_claude(self, current_prompt: str) -> str:
+    async def _fetch_claude(self, current_prompt: str) -> str | None:
         """Helper to fetch response from Anthropic Claude."""
         client = cast(anthropic.Anthropic, self._anthropic_client)
         try:
             message = await asyncio.to_thread(
                 client.messages.create,
-                model="claude-sonnet-4-5-20250929",
+                model="claude-3-sonnet-20240229",
                 system="You are a helpful assistant that generates Python code. Your goal is to collaborate with another AI to converge on a single, optimal solution. Focus on functional correctness and logical structure over stylistic differences.",
                 max_tokens=2048,
                 messages=[{"role": "user", "content": current_prompt}],
                 temperature=0.7,
             )
-            return message.content[0].text or "No response from Claude."
+            response_text = message.content[0].text.strip() if message.content else ""
+            if not response_text:
+                yield rx.toast("Claude returned an empty response.", duration=5000)
+                yield "Error: Claude returned an empty response."
+                return
+            yield response_text
+            return
         except Exception as e:
             logging.exception(f"Anthropic API error: {e}")
-            return f"Error: Could not get response from Claude. Details: {e}"
+            yield rx.toast(f"Claude API Error: {e}", duration=5000)
+            return

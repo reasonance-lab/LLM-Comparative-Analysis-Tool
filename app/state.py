@@ -47,20 +47,29 @@ class ComparisonState(rx.State):
     temperature: float = 0.7
     
     # Model selection
-    openai_model: str = "gpt-3.5-turbo"
+    openai_model: str = "gpt-5-mini-2025-08-07"
     claude_model: str = "claude-sonnet-4-5-20250929"
     
     # Available model options
     openai_models: List[str] = [
-        "gpt-3.5-turbo",
-        "gpt-4",
-        "gpt-4-turbo-preview"
+        "gpt-5-codex",
+        "gpt-5-2025-08-07",
+        "gpt-5-mini-2025-08-07"
     ]
     claude_models: List[str] = [
         "claude-sonnet-4-5-20250929",
         "claude-3-5-sonnet-20241022",
         "claude-3-opus-20240229"
     ]
+    
+    # Reasoning effort (for OpenAI Responses API)
+    reasoning_effort: str = "medium"
+    reasoning_efforts: List[str] = ["medium", "high"]
+    
+    # Extended thinking (for Claude)
+    extended_thinking_enabled: bool = False
+    thinking_budget_tokens: int = 2000
+    thinking_budget_options: List[int] = [1000, 2000, 5000, 10000]
     
     # UI state
     show_settings: bool = False
@@ -184,6 +193,21 @@ class ComparisonState(rx.State):
         self.claude_model = model
 
     @rx.event
+    def set_reasoning_effort(self, effort: str):
+        """Set reasoning effort for OpenAI Responses API."""
+        self.reasoning_effort = effort
+
+    @rx.event
+    def toggle_extended_thinking(self):
+        """Toggle Claude extended thinking on/off."""
+        self.extended_thinking_enabled = not self.extended_thinking_enabled
+
+    @rx.event
+    def set_thinking_budget(self, budget: int):
+        """Set thinking budget tokens for Claude extended thinking."""
+        self.thinking_budget_tokens = budget
+
+    @rx.event
     def select_iteration_for_diff(self, iteration: int):
         """Select an iteration to view its diff."""
         self.selected_iteration_for_diff = iteration
@@ -256,6 +280,9 @@ class ComparisonState(rx.State):
                 "temperature": self.temperature,
                 "openai_model": self.openai_model,
                 "claude_model": self.claude_model,
+                "reasoning_effort": self.reasoning_effort,
+                "extended_thinking_enabled": self.extended_thinking_enabled,
+                "thinking_budget_tokens": self.thinking_budget_tokens,
                 "converged": self.converged,
                 "final_similarity": self.last_similarity_score,
                 "total_iterations": len(self.history)
@@ -286,7 +313,10 @@ class ComparisonState(rx.State):
             f"- **Max Iterations:** {self.max_iterations}",
             f"- **Temperature:** {self.temperature}",
             f"- **OpenAI Model:** {self.openai_model}",
+            f"- **Reasoning Effort:** {self.reasoning_effort}",
             f"- **Claude Model:** {self.claude_model}",
+            f"- **Extended Thinking:** {'Enabled' if self.extended_thinking_enabled else 'Disabled'}",
+            f"- **Thinking Budget:** {self.thinking_budget_tokens} tokens" if self.extended_thinking_enabled else "",
             "",
             "## Results",
             f"- **Converged:** {'Yes' if self.converged else 'No'}",
@@ -665,25 +695,46 @@ Instructions:
         return float(numerator) / denominator
 
     async def _fetch_openai(self, current_prompt: str) -> str | None:
-        """Helper to fetch response from OpenAI."""
+        """Helper to fetch response from OpenAI using Responses API."""
         client = cast(openai.OpenAI, self._openai_client)
         try:
             system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
             
+            # Combine system message and user prompt for Responses API
+            full_input = f"{system_message}\n\nUser request: {current_prompt}"
+            
             response = await asyncio.to_thread(
-                client.chat.completions.create,
+                client.responses.create,
                 model=self.openai_model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": current_prompt}
+                input=[
+                    {
+                        "type": "text",
+                        "text": full_input
+                    }
                 ],
-                max_tokens=2048,
+                text={
+                    "format": {
+                        "type": "text"
+                    },
+                    "verbosity": "medium"
+                },
+                reasoning={
+                    "effort": self.reasoning_effort,
+                    "summary": "auto"
+                },
+                store=True,
                 temperature=self.temperature,
             )
             
-            response_text = (
-                response.choices[0].message.content.strip() if response.choices else ""
-            )
+            # Extract text from Responses API response
+            response_text = ""
+            if hasattr(response, 'output') and response.output:
+                for output_item in response.output:
+                    if hasattr(output_item, 'type') and output_item.type == 'text':
+                        if hasattr(output_item, 'text'):
+                            response_text += output_item.text
+            
+            response_text = response_text.strip()
             
             if not response_text:
                 logging.warning("OpenAI returned an empty response.")
@@ -696,21 +747,47 @@ Instructions:
             return None
 
     async def _fetch_claude(self, current_prompt: str) -> str | None:
-        """Helper to fetch response from Anthropic Claude."""
+        """Helper to fetch response from Anthropic Claude with optional extended thinking."""
         client = cast(anthropic.Anthropic, self._anthropic_client)
         try:
             system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
             
+            # Build API call parameters
+            api_params = {
+                "model": self.claude_model,
+                "system": system_message,
+                "max_tokens": 2048,
+                "messages": [{"role": "user", "content": current_prompt}],
+                "temperature": self.temperature,
+            }
+            
+            # Add extended thinking if enabled
+            if self.extended_thinking_enabled:
+                api_params["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": self.thinking_budget_tokens
+                }
+            
             message = await asyncio.to_thread(
                 client.messages.create,
-                model=self.claude_model,
-                system=system_message,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": current_prompt}],
-                temperature=self.temperature,
+                **api_params
             )
             
-            response_text = message.content[0].text.strip() if message.content else ""
+            # Extract response - may include thinking blocks
+            response_text = ""
+            thinking_text = ""
+            
+            if message.content:
+                for block in message.content:
+                    if hasattr(block, 'type'):
+                        if block.type == 'thinking':
+                            # Capture thinking for potential future use
+                            thinking_text += getattr(block, 'thinking', '')
+                        elif block.type == 'text':
+                            # Capture actual response text
+                            response_text += getattr(block, 'text', '')
+            
+            response_text = response_text.strip()
             
             if not response_text:
                 logging.warning("Claude returned an empty response.")

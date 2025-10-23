@@ -763,11 +763,16 @@ Instructions:
             system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
             api_params = {
                 "model": self.claude_model,
-                "system": system_message,
+                "system": [
+                    {
+                        "type": "text",
+                        "text": system_message,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
                 "max_tokens": self.max_tokens_claude,
                 "messages": [{"role": "user", "content": current_prompt}],
                 "temperature": self.temperature,
-                "cache_control": {"type": "ephemeral"},
             }
             if self.extended_thinking_enabled:
                 api_params["thinking"] = {

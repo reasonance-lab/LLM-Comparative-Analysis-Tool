@@ -226,7 +226,7 @@ class ComparisonState(rx.State):
         try:
             response = await asyncio.to_thread(
                 client.chat.completions.create,
-                model="gpt-4o-mini",
+                model="gpt-5-codex",
                 messages=[
                     {
                         "role": "system",
@@ -248,7 +248,7 @@ class ComparisonState(rx.State):
         try:
             message = await asyncio.to_thread(
                 client.messages.create,
-                model="claude-3-haiku-20240307",
+                model="claude-sonnet-4-5-20250929",
                 system="You are a helpful assistant that generates Python code. Your goal is to collaborate with another AI to converge on a single, optimal solution. Focus on functional correctness and logical structure over stylistic differences.",
                 max_tokens=2048,
                 messages=[{"role": "user", "content": current_prompt}],

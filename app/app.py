@@ -1,14 +1,22 @@
+"""
+Main application entry point for LLM Cross-Talk Analyzer - Phase 2 Enhanced
+"""
 import reflex as rx
 from app.state import ComparisonState
-from app.components import header, prompt_input_area, response_area
-import asyncio
+from app.components import (
+    header,
+    settings_panel,
+    prompt_input_area,
+    response_area,
+)
 
 
 def index() -> rx.Component:
-    """The main page of the application."""
+    """The main page of the application with all Phase 2 enhancements."""
     return rx.el.main(
         header(),
         rx.el.div(
+            settings_panel(),
             prompt_input_area(),
             response_area(),
             class_name="flex flex-col items-center w-full px-4 sm:px-6 lg:px-8 py-8 gap-8",
@@ -28,4 +36,4 @@ app = rx.App(
         ),
     ],
 )
-app.add_page(index, title="LLM Cross-Talk Analyzer")
+app.add_page(index, title="LLM Cross-Talk Analyzer - Phase 2")

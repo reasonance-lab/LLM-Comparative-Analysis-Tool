@@ -451,14 +451,30 @@ def mode_selector() -> rx.Component:
 
 
 def response_area() -> rx.Component:
-    """Displays the side-by-side responses or loading skeletons."""
+    """Displays the side-by-side responses or a loading spinner."""
     return rx.el.div(
         rx.cond(
             ComparisonState.is_loading,
             rx.el.div(
-                skeleton_card("OpenAI"),
-                skeleton_card("Claude"),
-                class_name="grid md:grid-cols-2 gap-8 w-full",
+                rx.cond(
+                    ~ComparisonState.has_responses,
+                    rx.el.div(
+                        skeleton_card("OpenAI"),
+                        skeleton_card("Claude"),
+                        class_name="grid md:grid-cols-2 gap-8 w-full",
+                    ),
+                    rx.el.div(
+                        rx.icon(
+                            "loader-circle",
+                            class_name="animate-spin h-12 w-12 text-indigo-500",
+                        ),
+                        rx.el.h3(
+                            "Generating responses from OpenAI and Claude...",
+                            class_name="text-lg font-semibold text-gray-600 mt-4",
+                        ),
+                        class_name="flex flex-col items-center justify-center p-12 bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-2xl text-center w-full min-h-[300px]",
+                    ),
+                )
             ),
             rx.cond(
                 ComparisonState.has_responses,

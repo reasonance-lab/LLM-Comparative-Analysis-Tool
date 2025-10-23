@@ -781,32 +781,21 @@ Instructions:
                 }
             response_text = ""
             thinking_text = ""
-
-            @rx.event
-            async def stream_and_collect():
-                nonlocal response_text, thinking_text
-                async with client.messages.stream(**api_params) as stream:
-                    async for event in stream:
-                        if (
-                            event.type == "content_block_delta"
-                            and event.delta.type == "text_delta"
-                        ):
-                            response_text += event.delta.text
-                            yield
-                        elif event.type == "thinking_start":
-                            pass
-                        elif event.type == "thinking_delta":
-                            if hasattr(event.delta, "thinking"):
-                                thinking_text += event.delta.thinking
-                                yield
-
-            await stream_and_collect()
-            response_text = response_text.strip()
-            if not response_text:
+            async with client.messages.stream(**api_params) as stream:
+                async for event in stream:
+                    if (
+                        event.type == "content_block_delta"
+                        and event.delta.type == "text_delta"
+                    ):
+                        response_text += event.delta.text
+                    elif event.type == "thinking_delta":
+                        if hasattr(event.delta, "thinking"):
+                            thinking_text += event.delta.thinking
+            final_response = response_text.strip()
+            if not final_response:
                 logging.warning("Claude returned an empty response.")
-                return
-            yield response_text
-            return
+                return None
+            return final_response
         except Exception as e:
             logging.exception(f"Anthropic API error: {e}")
-            return
+            return None

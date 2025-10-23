@@ -182,8 +182,19 @@ class ComparisonState(rx.State):
         """Stops the automated evaluation cycle."""
         self.automated_running = False
 
+    def _is_response_complete(self, response_text: str) -> bool:
+        """Check if the AI response appears to be complete."""
+        stripped_text = response_text.strip()
+        if "" in stripped_text:
+            return stripped_text.endswith("")
+        return True
+
     def _cosine_similarity(self, text1: str, text2: str) -> float:
-        """Calculate cosine similarity between two texts."""
+        """Calculate cosine similarity, but only if both responses are complete."""
+        if not self._is_response_complete(text1) or not self._is_response_complete(
+            text2
+        ):
+            return 0.0
         vec1 = Counter(text1.split())
         vec2 = Counter(text2.split())
         intersection = set(vec1.keys()) & set(vec2.keys())
@@ -209,7 +220,7 @@ class ComparisonState(rx.State):
                     },
                     {"role": "user", "content": current_prompt},
                 ],
-                max_tokens=1024,
+                max_tokens=2048,
                 temperature=0.7,
             )
             return response.choices[0].message.content or "No response from OpenAI."
@@ -225,7 +236,7 @@ class ComparisonState(rx.State):
                 client.messages.create,
                 model="claude-3-haiku-20240307",
                 system="You are a helpful assistant that generates Python code. Your goal is to collaborate with another AI to converge on a single, optimal solution. Focus on functional correctness and logical structure over stylistic differences.",
-                max_tokens=1024,
+                max_tokens=2048,
                 messages=[{"role": "user", "content": current_prompt}],
                 temperature=0.7,
             )

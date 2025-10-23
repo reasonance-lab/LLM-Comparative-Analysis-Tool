@@ -247,7 +247,7 @@ def response_card(
             class_name="flex items-center justify-between p-4 border-b border-gray-200",
         ),
         rx.el.div(
-            rx.el.div(
+            rx.markdown(
                 content,
                 class_name="prose prose-sm max-w-none text-gray-700 font-medium leading-relaxed",
             ),

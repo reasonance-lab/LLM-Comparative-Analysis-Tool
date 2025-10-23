@@ -106,8 +106,15 @@ class ComparisonState(rx.State):
             last_iteration = self.history[-1]
             openai_previous = last_iteration["openai_response"]
             claude_previous = last_iteration["claude_response"]
-            openai_new_prompt = f"Original Prompt: {self.prompt}\n\nYour previous response was:\n---\n{openai_previous}\n---\nThe other model's (Claude's) response was:\n---\n{claude_previous}\n---\nYour goal is to converge on a single, functionally identical solution. Analyze the other model's response. If its logic is superior or correct, adopt it. Minimize stylistic differences (comments, variable names) and focus on creating the same core code. Produce the refined, complete Python code solution."
-            claude_new_prompt = f"Original Prompt: {self.prompt}\n\nYour previous response was:\n---\n{claude_previous}\n---\nThe other model's (OpenAI's) response was:\n---\n{openai_previous}\n---\nYour goal is to converge on a single, functionally identical solution. Analyze the other model's response. If its logic is superior or correct, adopt it. Minimize stylistic differences (comments, variable names) and focus on creating the same core code. Produce the refined, complete Python code solution."
+            new_prompt_template = f"Original User Prompt: {self.prompt}\n\nYour previous code:\n---\n{{your_previous_response}}\n---\n\nAlternative code approach:\n---\n{{other_model_response}}\n---\n\nInstructions:\n- Review both code solutions against the ORIGINAL USER PROMPT above\n- If the alternative approach has superior logic for solving the USER'S REQUIREMENT, adopt it\n- Eliminate all stylistic differences (comments, variable names, formatting)\n- Do NOT include any commentary about code quality or structure\n- Output ONLY the refined, complete Python code solution that best addresses the original prompt"
+            openai_new_prompt = new_prompt_template.format(
+                your_previous_response=openai_previous,
+                other_model_response=claude_previous,
+            )
+            claude_new_prompt = new_prompt_template.format(
+                your_previous_response=claude_previous,
+                other_model_response=openai_previous,
+            )
         openai_task = self._fetch_openai(openai_new_prompt)
         claude_task = self._fetch_claude(claude_new_prompt)
         try:
@@ -152,8 +159,15 @@ class ComparisonState(rx.State):
                 self._initialize_clients()
                 openai_previous = last_iteration["openai_response"]
                 claude_previous = last_iteration["claude_response"]
-                openai_new_prompt = f"Original Prompt: {self.prompt}\n\nYour previous response was:\n---\n{openai_previous}\n---\nThe other model's (Claude's) response was:\n---\n{claude_previous}\n---\nYour goal is to converge on a single, functionally identical solution. Analyze the other model's response. If its logic is superior or correct, adopt it. Minimize stylistic differences (comments, variable names) and focus on creating the same core code. Produce the refined, complete Python code solution."
-                claude_new_prompt = f"Original Prompt: {self.prompt}\n\nYour previous response was:\n---\n{claude_previous}\n---\nThe other model's (OpenAI's) response was:\n---\n{openai_previous}\n---\nYour goal is to converge on a single, functionally identical solution. Analyze the other model's response. If its logic is superior or correct, adopt it. Minimize stylistic differences (comments, variable names) and focus on creating the same core code. Produce the refined, complete Python code solution."
+                new_prompt_template = f"Original User Prompt: {self.prompt}\n\nYour previous code:\n---\n{{your_previous_response}}\n---\n\nAlternative code approach:\n---\n{{other_model_response}}\n---\n\nInstructions:\n- Review both code solutions against the ORIGINAL USER PROMPT above\n- If the alternative approach has superior logic for solving the USER'S REQUIREMENT, adopt it\n- Eliminate all stylistic differences (comments, variable names, formatting)\n- Do NOT include any commentary about code quality or structure\n- Output ONLY the refined, complete Python code solution that best addresses the original prompt"
+                openai_new_prompt = new_prompt_template.format(
+                    your_previous_response=openai_previous,
+                    other_model_response=claude_previous,
+                )
+                claude_new_prompt = new_prompt_template.format(
+                    your_previous_response=claude_previous,
+                    other_model_response=openai_previous,
+                )
             openai_task = self._fetch_openai(openai_new_prompt)
             claude_task = self._fetch_claude(claude_new_prompt)
             try:

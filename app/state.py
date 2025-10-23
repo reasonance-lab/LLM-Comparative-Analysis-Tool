@@ -730,7 +730,6 @@ Instructions:
                 ],
                 reasoning={"effort": self.reasoning_effort, "summary": "auto"},
                 store=True,
-                temperature=self.temperature,
             )
             response_text = ""
             if hasattr(response, "output") and response.output:

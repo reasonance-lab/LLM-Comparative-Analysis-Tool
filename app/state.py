@@ -773,22 +773,32 @@ Instructions:
                 "max_tokens": self.max_tokens_claude,
                 "messages": [{"role": "user", "content": current_prompt}],
                 "temperature": self.temperature,
+                "stream": True,
             }
             if self.extended_thinking_enabled:
                 api_params["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": self.thinking_budget_tokens,
                 }
-            message = await asyncio.to_thread(client.messages.create, **api_params)
             response_text = ""
             thinking_text = ""
-            if message.content:
-                for block in message.content:
-                    if hasattr(block, "type"):
-                        if block.type == "thinking":
-                            thinking_text += getattr(block, "thinking", "")
-                        elif block.type == "text":
-                            response_text += getattr(block, "text", "")
+
+            @rx.event
+            async def stream_and_collect():
+                nonlocal response_text, thinking_text
+                with client.messages.stream(**api_params) as stream:
+                    for event in stream:
+                        if (
+                            event.type == "content_block_delta"
+                            and event.delta.type == "text_delta"
+                        ):
+                            response_text += event.delta.text
+                        elif event.type == "thinking_start":
+                            pass
+                        elif event.type == "thinking_delta":
+                            thinking_text += event.delta.thinking
+
+            await stream_and_collect()
             response_text = response_text.strip()
             if not response_text:
                 logging.warning("Claude returned an empty response.")

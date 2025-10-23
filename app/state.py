@@ -721,22 +721,24 @@ Instructions:
         client = cast(openai.OpenAI, self._openai_client)
         try:
             system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
-            full_input = f"{system_message}\n\nUser request: {current_prompt}"
             response = await asyncio.to_thread(
                 client.responses.create,
                 model=self.openai_model,
-                input=[{"type": "text", "text": full_input}],
-                text={"format": {"type": "text"}, "verbosity": "medium"},
+                input=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": current_prompt},
+                ],
                 reasoning={"effort": self.reasoning_effort, "summary": "auto"},
                 store=True,
                 temperature=self.temperature,
             )
             response_text = ""
             if hasattr(response, "output") and response.output:
-                for output_item in response.output:
-                    if hasattr(output_item, "type") and output_item.type == "text":
-                        if hasattr(output_item, "text"):
-                            response_text += output_item.text
+                for item in response.output:
+                    if item.type == "message":
+                        for content_block in item.message.content:
+                            if content_block.type == "text":
+                                response_text += content_block.text
             response_text = response_text.strip()
             if not response_text:
                 logging.warning("OpenAI returned an empty response.")

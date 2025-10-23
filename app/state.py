@@ -2,18 +2,20 @@
 State management for LLM Cross-Talk Analyzer - Phase 2 Enhanced Version
 Includes: Export functionality, chart data, model selection, diff tracking
 """
+
 import reflex as rx
 import os
 import asyncio
 import openai
 import anthropic
-from typing import Literal, TypedDict, cast, List
+from typing import Literal, TypedDict, cast
 import logging
 from collections import Counter
 import math
 import json
 from datetime import datetime
 import difflib
+import plotly.graph_objects as go
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -22,6 +24,7 @@ logging.basicConfig(
 
 class ModelResponse(TypedDict):
     """Type definition for a single iteration response."""
+
     iteration: int
     openai_response: str
     claude_response: str
@@ -32,7 +35,6 @@ class ModelResponse(TypedDict):
 class ComparisonState(rx.State):
     """Manages the state for the LLM comparison application with enhanced features."""
 
-    # Core state
     prompt: str = ""
     is_loading: bool = False
     is_iterating: bool = False
@@ -40,50 +42,32 @@ class ComparisonState(rx.State):
     converged: bool = False
     mode: Literal["manual", "automated"] = "manual"
     history: list[ModelResponse] = []
-    
-    # Configuration state
-    convergence_threshold: float = 0.90
+    convergence_threshold: float = 0.9
     max_iterations: int = 10
     temperature: float = 0.7
-    
-    # Model selection
     openai_model: str = "gpt-5-mini-2025-08-07"
     claude_model: str = "claude-sonnet-4-5-20250929"
-    
-    # Available model options
-    openai_models: List[str] = [
+    openai_models: list[str] = [
         "gpt-5-codex",
         "gpt-5-2025-08-07",
-        "gpt-5-mini-2025-08-07"
+        "gpt-5-mini-2025-08-07",
     ]
-    claude_models: List[str] = [
+    claude_models: list[str] = [
         "claude-sonnet-4-5-20250929",
         "claude-3-5-sonnet-20241022",
-        "claude-3-opus-20240229"
+        "claude-3-opus-20240229",
     ]
-    
-    # Reasoning effort (for OpenAI Responses API)
     reasoning_effort: str = "medium"
-    reasoning_efforts: List[str] = ["medium", "high"]
-    
-    # Extended thinking (for Claude)
+    reasoning_efforts: list[str] = ["medium", "high"]
     extended_thinking_enabled: bool = False
     thinking_budget_tokens: int = 2000
-    thinking_budget_options: List[int] = [1000, 2000, 5000, 10000]
-    
-    # UI state
+    thinking_budget_options: list[int] = [1000, 2000, 5000, 10000]
     show_settings: bool = False
     show_diff_viewer: bool = False
     selected_iteration_for_diff: int = 0
-    
-    # Chart data
     chart_data_ready: bool = False
-    
-    # Diff data
     openai_diff_html: str = ""
     claude_diff_html: str = ""
-    
-    # Private clients
     _openai_client: openai.OpenAI | None = None
     _anthropic_client: anthropic.Anthropic | None = None
 
@@ -118,10 +102,8 @@ class ComparisonState(rx.State):
         """Returns a human-readable convergence status."""
         if not self.history:
             return "No iterations yet"
-        
         last_similarity = self.history[-1]["similarity"]
         threshold_pct = self.convergence_threshold * 100
-        
         if last_similarity >= self.convergence_threshold:
             return f"✓ Converged at {last_similarity * 100:.1f}% similarity"
         elif len(self.history) >= self.max_iterations:
@@ -131,19 +113,86 @@ class ComparisonState(rx.State):
             return f"Need {gap:.1f}% more to reach {threshold_pct:.0f}% threshold"
 
     @rx.var
-    def chart_iterations(self) -> List[int]:
+    def chart_iterations(self) -> list[int]:
         """Returns list of iteration numbers for chart."""
         return [item["iteration"] for item in self.history]
 
     @rx.var
-    def chart_similarities(self) -> List[float]:
+    def chart_similarities(self) -> list[float]:
         """Returns list of similarity scores for chart."""
         return [item["similarity"] * 100 for item in self.history]
 
     @rx.var
-    def chart_change_rates(self) -> List[float]:
+    def chart_change_rates(self) -> list[float]:
         """Returns list of change rates for chart."""
         return [item["change_rate"] * 100 for item in self.history]
+
+    @rx.var
+    def convergence_fig(self) -> go.Figure:
+        """Generate the convergence progress chart figure."""
+        fig = go.Figure()
+        if self.chart_iterations:
+            fig.add_trace(
+                go.Scatter(
+                    x=self.chart_iterations,
+                    y=self.chart_similarities,
+                    mode="lines+markers",
+                    name="Similarity",
+                    line={"color": "#6366f1", "width": 3},
+                    marker={"size": 8, "color": "#6366f1"},
+                    hovertemplate="Iteration %{x}<br>Similarity: %{y:.1f}%<extra></extra>",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=self.chart_iterations,
+                    y=[self.convergence_threshold * 100] * len(self.chart_iterations),
+                    mode="lines",
+                    name="Threshold",
+                    line={"color": "#22c55e", "width": 2, "dash": "dash"},
+                    hovertemplate="Threshold: %{y:.0f}%<extra></extra>",
+                )
+            )
+        fig.update_layout(
+            title=None,
+            xaxis={"title": "Iteration", "showgrid": True, "gridcolor": "#f3f4f6"},
+            yaxis={
+                "title": "Similarity (%)",
+                "showgrid": True,
+                "gridcolor": "#f3f4f6",
+                "range": [0, 100],
+            },
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            font={"family": "Raleway, sans-serif"},
+            hovermode="x unified",
+            showlegend=True,
+            legend={"x": 0.02, "y": 0.98, "bgcolor": "rgba(255,255,255,0.8)"},
+            margin={"l": 60, "r": 40, "t": 20, "b": 60},
+        )
+        return fig
+
+    @rx.var
+    def openai_models_options(self) -> list[str]:
+        return self.openai_models
+
+    @rx.var
+    def claude_models_options(self) -> list[str]:
+        return self.claude_models
+
+    @rx.var
+    def reasoning_efforts_options(self) -> list[str]:
+        return self.reasoning_efforts
+
+    @rx.var
+    def thinking_budget_options_str(self) -> list[str]:
+        return [str(opt) for opt in self.thinking_budget_options]
+
+    @rx.var
+    def diff_iteration_options(self) -> list[str]:
+        if self.current_iteration_count < 2:
+            return []
+        return [str(i) for i in range(2, self.current_iteration_count + 1)]
 
     @rx.event
     def set_mode(self, new_mode: Literal["manual", "automated"]):
@@ -160,27 +209,32 @@ class ComparisonState(rx.State):
         """Toggle diff viewer visibility."""
         self.show_diff_viewer = not self.show_diff_viewer
         if self.show_diff_viewer and len(self.history) > 1:
-            # Default to comparing last iteration with previous
             self.selected_iteration_for_diff = len(self.history)
             self._generate_diffs()
 
     @rx.event
-    def update_convergence_threshold(self, value: list[float]):
+    def update_convergence_threshold(self, value: str):
         """Update convergence threshold from slider."""
-        if value and len(value) > 0:
-            self.convergence_threshold = value[0]
+        try:
+            self.convergence_threshold = float(value)
+        except (ValueError, TypeError) as e:
+            logging.exception(f"Error updating convergence threshold: {e}")
 
     @rx.event
-    def update_max_iterations(self, value: list[int]):
+    def update_max_iterations(self, value: str):
         """Update max iterations from slider."""
-        if value and len(value) > 0:
-            self.max_iterations = int(value[0])
+        try:
+            self.max_iterations = int(value)
+        except (ValueError, TypeError) as e:
+            logging.exception(f"Error updating max iterations: {e}")
 
     @rx.event
-    def update_temperature(self, value: list[float]):
+    def update_temperature(self, value: str):
         """Update temperature from slider."""
-        if value and len(value) > 0:
-            self.temperature = value[0]
+        try:
+            self.temperature = float(value)
+        except (ValueError, TypeError) as e:
+            logging.exception(f"Error updating temperature: {e}")
 
     @rx.event
     def set_openai_model(self, model: str):
@@ -203,15 +257,21 @@ class ComparisonState(rx.State):
         self.extended_thinking_enabled = not self.extended_thinking_enabled
 
     @rx.event
-    def set_thinking_budget(self, budget: int):
+    def set_thinking_budget(self, budget: str):
         """Set thinking budget tokens for Claude extended thinking."""
-        self.thinking_budget_tokens = budget
+        try:
+            self.thinking_budget_tokens = int(budget)
+        except (ValueError, TypeError) as e:
+            logging.exception(f"Error setting thinking budget: {e}")
 
     @rx.event
-    def select_iteration_for_diff(self, iteration: int):
+    def select_iteration_for_diff(self, iteration: str):
         """Select an iteration to view its diff."""
-        self.selected_iteration_for_diff = iteration
-        self._generate_diffs()
+        try:
+            self.selected_iteration_for_diff = int(iteration)
+            self._generate_diffs()
+        except (ValueError, TypeError) as e:
+            logging.exception(f"Error selecting iteration for diff: {e}")
 
     def _generate_diffs(self):
         """Generate HTML diffs for selected iteration."""
@@ -219,29 +279,23 @@ class ComparisonState(rx.State):
             self.openai_diff_html = "No previous iteration to compare"
             self.claude_diff_html = "No previous iteration to compare"
             return
-        
         idx = self.selected_iteration_for_diff - 1
         if idx >= len(self.history):
             return
-        
         current = self.history[idx]
         previous = self.history[idx - 1]
-        
-        # Generate OpenAI diff
         openai_diff = difflib.unified_diff(
             previous["openai_response"].splitlines(keepends=True),
             current["openai_response"].splitlines(keepends=True),
-            lineterm='',
-            n=3
+            lineterm="",
+            n=3,
         )
         self.openai_diff_html = self._format_diff_as_html(openai_diff)
-        
-        # Generate Claude diff
         claude_diff = difflib.unified_diff(
             previous["claude_response"].splitlines(keepends=True),
             current["claude_response"].splitlines(keepends=True),
-            lineterm='',
-            n=3
+            lineterm="",
+            n=3,
         )
         self.claude_diff_html = self._format_diff_as_html(claude_diff)
 
@@ -250,26 +304,31 @@ class ComparisonState(rx.State):
         lines = list(diff)
         if not lines:
             return "No changes detected"
-        
         formatted = []
         for line in lines:
-            if line.startswith('+') and not line.startswith('+++'):
-                formatted.append(f"<span style='color: #22c55e; background: #f0fdf4; display: block; padding: 2px 8px;'>+ {line[1:]}</span>")
-            elif line.startswith('-') and not line.startswith('---'):
-                formatted.append(f"<span style='color: #ef4444; background: #fef2f2; display: block; padding: 2px 8px;'>- {line[1:]}</span>")
-            elif line.startswith('@@'):
-                formatted.append(f"<span style='color: #6366f1; background: #eef2ff; display: block; padding: 2px 8px; font-weight: bold;'>{line}</span>")
+            if line.startswith("+") and (not line.startswith("+++")):
+                formatted.append(
+                    f"<span style='color: #22c55e; background: #f0fdf4; display: block; padding: 2px 8px;'>+ {line[1:]}</span>"
+                )
+            elif line.startswith("-") and (not line.startswith("---")):
+                formatted.append(
+                    f"<span style='color: #ef4444; background: #fef2f2; display: block; padding: 2px 8px;'>- {line[1:]}</span>"
+                )
+            elif line.startswith("@@"):
+                formatted.append(
+                    f"<span style='color: #6366f1; background: #eef2ff; display: block; padding: 2px 8px; font-weight: bold;'>{line}</span>"
+                )
             else:
-                formatted.append(f"<span style='color: #6b7280; display: block; padding: 2px 8px;'>{line}</span>")
-        
-        return ''.join(formatted)
+                formatted.append(
+                    f"<span style='color: #6b7280; display: block; padding: 2px 8px;'>{line}</span>"
+                )
+        return "".join(formatted)
 
     @rx.event
     def export_json(self):
         """Export current session data as JSON."""
         if not self.history:
             return rx.window_alert("No data to export")
-        
         export_data = {
             "metadata": {
                 "prompt": self.prompt,
@@ -285,15 +344,14 @@ class ComparisonState(rx.State):
                 "thinking_budget_tokens": self.thinking_budget_tokens,
                 "converged": self.converged,
                 "final_similarity": self.last_similarity_score,
-                "total_iterations": len(self.history)
+                "total_iterations": len(self.history),
             },
-            "history": self.history
+            "history": self.history,
         }
-        
         json_str = json.dumps(export_data, indent=2)
         return rx.download(
             data=json_str,
-            filename=f"llm_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            filename=f"llm_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
         )
 
     @rx.event
@@ -301,7 +359,6 @@ class ComparisonState(rx.State):
         """Export current session as formatted Markdown."""
         if not self.history:
             return rx.window_alert("No data to export")
-        
         md_lines = [
             "# LLM Cross-Talk Analysis Report",
             "",
@@ -315,46 +372,49 @@ class ComparisonState(rx.State):
             f"- **OpenAI Model:** {self.openai_model}",
             f"- **Reasoning Effort:** {self.reasoning_effort}",
             f"- **Claude Model:** {self.claude_model}",
-            f"- **Extended Thinking:** {'Enabled' if self.extended_thinking_enabled else 'Disabled'}",
-            f"- **Thinking Budget:** {self.thinking_budget_tokens} tokens" if self.extended_thinking_enabled else "",
+            f"- **Extended Thinking:** {('Enabled' if self.extended_thinking_enabled else 'Disabled')}",
+            f"- **Thinking Budget:** {self.thinking_budget_tokens} tokens"
+            if self.extended_thinking_enabled
+            else "",
             "",
             "## Results",
-            f"- **Converged:** {'Yes' if self.converged else 'No'}",
+            f"- **Converged:** {('Yes' if self.converged else 'No')}",
             f"- **Final Similarity:** {self.last_similarity_score:.1f}%",
             f"- **Total Iterations:** {len(self.history)}",
             "",
             "## Original Prompt",
-            "```",
+            "",
             self.prompt,
-            "```",
+            "",
             "",
             "## Iteration History",
-            ""
+            "",
         ]
-        
         for item in self.history:
-            md_lines.extend([
-                f"### Iteration {item['iteration']}",
-                f"**Similarity:** {item['similarity'] * 100:.1f}% | **Change Rate:** {item['change_rate'] * 100:.2f}%",
-                "",
-                "#### OpenAI Response",
-                "```",
-                item['openai_response'],
-                "```",
-                "",
-                "#### Claude Response",
-                "```",
-                item['claude_response'],
-                "```",
-                "",
-                "---",
-                ""
-            ])
-        
-        md_content = "\n".join(md_lines)
+            md_lines.extend(
+                [
+                    f"### Iteration {item['iteration']}",
+                    f"**Similarity:** {item['similarity'] * 100:.1f}% | **Change Rate:** {item['change_rate'] * 100:.2f}%",
+                    "",
+                    "#### OpenAI Response",
+                    "",
+                    item["openai_response"],
+                    "",
+                    "",
+                    "#### Claude Response",
+                    "",
+                    item["claude_response"],
+                    "",
+                    "",
+                    "---",
+                    "",
+                ]
+            )
+        md_content = """
+""".join(md_lines)
         return rx.download(
             data=md_content,
-            filename=f"llm_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            filename=f"llm_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
         )
 
     @rx.event
@@ -376,7 +436,6 @@ class ComparisonState(rx.State):
             if not self.prompt or not self.prompt.strip():
                 yield rx.toast.error("Please enter a prompt.", duration=3000)
                 return
-            
             self.is_loading = True
             self.is_iterating = False
             self.automated_running = False
@@ -384,12 +443,10 @@ class ComparisonState(rx.State):
             self.history = []
             self.chart_data_ready = False
             self._initialize_clients()
-
         try:
             openai_task = self._fetch_openai(self.prompt)
             claude_task = self._fetch_claude(self.prompt)
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
-
             if openai_res is None or claude_res is None:
                 async with self:
                     self.is_loading = False
@@ -398,9 +455,7 @@ class ComparisonState(rx.State):
                 if claude_res is None:
                     yield rx.toast.error("Claude failed to respond.", duration=5000)
                 return
-
             similarity = self._cosine_similarity(openai_res, claude_res)
-
             async with self:
                 initial_responses: ModelResponse = {
                     "iteration": 1,
@@ -411,10 +466,8 @@ class ComparisonState(rx.State):
                 }
                 self.history.append(initial_responses)
                 self.chart_data_ready = True
-                
                 if self.mode == "automated":
                     yield ComparisonState.run_automated_cycle
-
         except Exception as e:
             logging.exception(f"Error fetching initial responses: {e}")
             yield rx.toast.error(f"An unexpected error occurred: {e}", duration=5000)
@@ -428,14 +481,11 @@ class ComparisonState(rx.State):
         async with self:
             if not self.history:
                 return
-            
             self.is_iterating = True
             self._initialize_clients()
-            
             last_iteration = self.history[-1]
             openai_previous = last_iteration["openai_response"]
             claude_previous = last_iteration["claude_response"]
-
             new_prompt_template = """Original User Request:
 {original_prompt}
 
@@ -457,7 +507,6 @@ Instructions:
 - Synthesize the best aspects of both responses into a refined answer
 - DO NOT add meta-commentary about the comparison process
 - Output ONLY your refined, complete response to the original user request"""
-
             openai_new_prompt = new_prompt_template.format(
                 original_prompt=self.prompt,
                 your_previous_response=openai_previous,
@@ -468,12 +517,10 @@ Instructions:
                 your_previous_response=claude_previous,
                 other_model_response=openai_previous,
             )
-
         try:
             openai_task = self._fetch_openai(openai_new_prompt)
             claude_task = self._fetch_claude(claude_new_prompt)
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
-
             async with self:
                 if openai_res is None or claude_res is None:
                     self.is_iterating = False
@@ -486,11 +533,9 @@ Instructions:
                             "Claude failed to respond during iteration.", duration=5000
                         )
                     return
-
                 similarity = self._cosine_similarity(openai_res, claude_res)
                 prev_similarity = last_iteration["similarity"]
                 change_rate = abs(similarity - prev_similarity)
-
                 new_iteration: ModelResponse = {
                     "iteration": len(self.history) + 1,
                     "openai_response": openai_res,
@@ -499,14 +544,12 @@ Instructions:
                     "change_rate": change_rate,
                 }
                 self.history.append(new_iteration)
-                
                 if similarity >= self.convergence_threshold:
                     self.converged = True
                     yield rx.toast.success(
                         f"Convergence reached! Similarity: {similarity * 100:.1f}%",
-                        duration=5000
+                        duration=5000,
                     )
-
         except Exception as e:
             logging.exception(f"Error during iteration: {e}")
             yield rx.toast.error(
@@ -524,56 +567,47 @@ Instructions:
                 return
             self.automated_running = True
             self.converged = False
-
         oscillation_count = 0
-        
         while True:
             async with self:
                 if not self.automated_running:
                     break
-
                 last_iteration = self.history[-1]
                 current_iter_count = last_iteration["iteration"]
                 similarity = last_iteration["similarity"]
-
                 if similarity >= self.convergence_threshold:
                     self.converged = True
                     self.automated_running = False
                     yield rx.toast.success(
                         f"✓ Converged at {similarity * 100:.1f}% similarity!",
-                        duration=5000
+                        duration=5000,
                     )
                     break
-
                 if current_iter_count >= self.max_iterations:
                     self.converged = False
                     self.automated_running = False
                     yield rx.toast.warning(
                         f"Max iterations ({self.max_iterations}) reached. Final similarity: {similarity * 100:.1f}%",
-                        duration=5000
+                        duration=5000,
                     )
                     break
-
                 if len(self.history) >= 3:
                     recent_changes = [h["change_rate"] for h in self.history[-3:]]
                     avg_change = sum(recent_changes) / len(recent_changes)
-                    
                     if avg_change < 0.01:
                         oscillation_count += 1
                         if oscillation_count >= 2:
                             self.automated_running = False
                             yield rx.toast.warning(
                                 f"Responses stabilized at {similarity * 100:.1f}% similarity without reaching threshold.",
-                                duration=5000
+                                duration=5000,
                             )
                             break
                     else:
                         oscillation_count = 0
-
                 self._initialize_clients()
                 openai_previous = last_iteration["openai_response"]
                 claude_previous = last_iteration["claude_response"]
-
                 new_prompt_template = """Original User Request:
 {original_prompt}
 
@@ -595,7 +629,6 @@ Instructions:
 - Synthesize the best aspects of both responses into a refined answer
 - DO NOT add meta-commentary about the comparison process
 - Output ONLY your refined, complete response to the original user request"""
-
                 openai_new_prompt = new_prompt_template.format(
                     original_prompt=self.prompt,
                     your_previous_response=openai_previous,
@@ -606,12 +639,10 @@ Instructions:
                     your_previous_response=claude_previous,
                     other_model_response=openai_previous,
                 )
-
             try:
                 openai_task = self._fetch_openai(openai_new_prompt)
                 claude_task = self._fetch_claude(claude_new_prompt)
                 openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
-
                 if openai_res is None or claude_res is None:
                     async with self:
                         self.automated_running = False
@@ -624,11 +655,9 @@ Instructions:
                             "Claude failed during automated cycle.", duration=5000
                         )
                     break
-
                 new_similarity = self._cosine_similarity(openai_res, claude_res)
                 prev_similarity = last_iteration["similarity"]
                 change_rate = abs(new_similarity - prev_similarity)
-
                 async with self:
                     new_iteration: ModelResponse = {
                         "iteration": current_iter_count + 1,
@@ -638,7 +667,6 @@ Instructions:
                         "change_rate": change_rate,
                     }
                     self.history.append(new_iteration)
-
             except Exception as e:
                 async with self:
                     self.automated_running = False
@@ -647,10 +675,8 @@ Instructions:
                     f"Unexpected error in automated cycle: {e}", duration=5000
                 )
                 break
-
             await asyncio.sleep(0.5)
             yield
-
         async with self:
             self.automated_running = False
 
@@ -662,15 +688,16 @@ Instructions:
     def _is_response_complete(self, response_text: str) -> bool:
         """Check if the AI response appears to be complete."""
         stripped_text = response_text.strip()
-        if "```" in stripped_text:
-            return stripped_text.count("```") % 2 == 0
+        if "" in stripped_text:
+            return stripped_text.count("") % 2 == 0
         return True
 
     def _cosine_similarity(self, text1: str, text2: str) -> float:
         """Calculate cosine similarity between two texts."""
-        if not self._is_response_complete(text1) or not self._is_response_complete(text2):
+        if not self._is_response_complete(text1) or not self._is_response_complete(
+            text2
+        ):
             return 0.0
-
         if (
             not text1
             or not text2
@@ -678,20 +705,15 @@ Instructions:
             or text2.startswith("Error:")
         ):
             return 0.0
-
         vec1 = Counter(text1.lower().split())
         vec2 = Counter(text2.lower().split())
-
         intersection = set(vec1.keys()) & set(vec2.keys())
         numerator = sum((vec1[x] * vec2[x] for x in intersection))
-
         sum1 = sum((vec1[x] ** 2 for x in vec1.keys()))
         sum2 = sum((vec2[x] ** 2 for x in vec2.keys()))
         denominator = math.sqrt(sum1) * math.sqrt(sum2)
-
         if not denominator:
             return 0.0
-
         return float(numerator) / denominator
 
     async def _fetch_openai(self, current_prompt: str) -> str | None:
@@ -699,49 +721,27 @@ Instructions:
         client = cast(openai.OpenAI, self._openai_client)
         try:
             system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
-            
-            # Combine system message and user prompt for Responses API
             full_input = f"{system_message}\n\nUser request: {current_prompt}"
-            
             response = await asyncio.to_thread(
                 client.responses.create,
                 model=self.openai_model,
-                input=[
-                    {
-                        "type": "text",
-                        "text": full_input
-                    }
-                ],
-                text={
-                    "format": {
-                        "type": "text"
-                    },
-                    "verbosity": "medium"
-                },
-                reasoning={
-                    "effort": self.reasoning_effort,
-                    "summary": "auto"
-                },
+                input=[{"type": "text", "text": full_input}],
+                text={"format": {"type": "text"}, "verbosity": "medium"},
+                reasoning={"effort": self.reasoning_effort, "summary": "auto"},
                 store=True,
                 temperature=self.temperature,
             )
-            
-            # Extract text from Responses API response
             response_text = ""
-            if hasattr(response, 'output') and response.output:
+            if hasattr(response, "output") and response.output:
                 for output_item in response.output:
-                    if hasattr(output_item, 'type') and output_item.type == 'text':
-                        if hasattr(output_item, 'text'):
+                    if hasattr(output_item, "type") and output_item.type == "text":
+                        if hasattr(output_item, "text"):
                             response_text += output_item.text
-            
             response_text = response_text.strip()
-            
             if not response_text:
                 logging.warning("OpenAI returned an empty response.")
                 return None
-            
             return response_text
-            
         except Exception as e:
             logging.exception(f"OpenAI API error: {e}")
             return None
@@ -751,8 +751,6 @@ Instructions:
         client = cast(anthropic.Anthropic, self._anthropic_client)
         try:
             system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
-            
-            # Build API call parameters
             api_params = {
                 "model": self.claude_model,
                 "system": system_message,
@@ -760,41 +758,26 @@ Instructions:
                 "messages": [{"role": "user", "content": current_prompt}],
                 "temperature": self.temperature,
             }
-            
-            # Add extended thinking if enabled
             if self.extended_thinking_enabled:
                 api_params["thinking"] = {
                     "type": "enabled",
-                    "budget_tokens": self.thinking_budget_tokens
+                    "budget_tokens": self.thinking_budget_tokens,
                 }
-            
-            message = await asyncio.to_thread(
-                client.messages.create,
-                **api_params
-            )
-            
-            # Extract response - may include thinking blocks
+            message = await asyncio.to_thread(client.messages.create, **api_params)
             response_text = ""
             thinking_text = ""
-            
             if message.content:
                 for block in message.content:
-                    if hasattr(block, 'type'):
-                        if block.type == 'thinking':
-                            # Capture thinking for potential future use
-                            thinking_text += getattr(block, 'thinking', '')
-                        elif block.type == 'text':
-                            # Capture actual response text
-                            response_text += getattr(block, 'text', '')
-            
+                    if hasattr(block, "type"):
+                        if block.type == "thinking":
+                            thinking_text += getattr(block, "thinking", "")
+                        elif block.type == "text":
+                            response_text += getattr(block, "text", "")
             response_text = response_text.strip()
-            
             if not response_text:
                 logging.warning("Claude returned an empty response.")
                 return None
-            
             return response_text
-            
         except Exception as e:
             logging.exception(f"Anthropic API error: {e}")
             return None

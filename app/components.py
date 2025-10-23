@@ -2,6 +2,7 @@
 UI Components for LLM Cross-Talk Analyzer - Phase 2 Enhanced Version
 Includes: Convergence chart, diff viewer, export controls, model selection
 """
+
 import reflex as rx
 from app.state import ComparisonState
 import plotly.graph_objects as go
@@ -62,36 +63,32 @@ def settings_panel() -> rx.Component:
                     "Configuration Settings",
                     class_name="text-xl font-bold text-gray-800 mb-6",
                 ),
-                
-                # Model Selection Section
                 rx.el.div(
                     rx.el.h4(
                         "Model Selection",
                         class_name="text-lg font-semibold text-gray-700 mb-4",
                     ),
                     rx.el.div(
-                        # OpenAI Model Selection
                         rx.el.div(
                             rx.el.label(
                                 "OpenAI Model",
                                 class_name="text-sm font-semibold text-gray-700 mb-2 block",
                             ),
                             rx.select(
-                                ComparisonState.openai_models,
+                                ComparisonState.openai_models_options,
                                 value=ComparisonState.openai_model,
                                 on_change=ComparisonState.set_openai_model,
                                 class_name="w-full",
                             ),
                             class_name="flex-1",
                         ),
-                        # Claude Model Selection
                         rx.el.div(
                             rx.el.label(
                                 "Claude Model",
                                 class_name="text-sm font-semibold text-gray-700 mb-2 block",
                             ),
                             rx.select(
-                                ComparisonState.claude_models,
+                                ComparisonState.claude_models_options,
                                 value=ComparisonState.claude_model,
                                 on_change=ComparisonState.set_claude_model,
                                 class_name="w-full",
@@ -100,14 +97,13 @@ def settings_panel() -> rx.Component:
                         ),
                         class_name="grid md:grid-cols-2 gap-4 mb-4",
                     ),
-                    # Reasoning Effort Selection (for OpenAI)
                     rx.el.div(
                         rx.el.label(
                             "OpenAI Reasoning Effort",
                             class_name="text-sm font-semibold text-gray-700 mb-2 block",
                         ),
                         rx.select(
-                            ComparisonState.reasoning_efforts,
+                            ComparisonState.reasoning_efforts_options,
                             value=ComparisonState.reasoning_effort,
                             on_change=ComparisonState.set_reasoning_effort,
                             class_name="w-full md:w-1/2",
@@ -118,7 +114,6 @@ def settings_panel() -> rx.Component:
                         ),
                         class_name="mt-4",
                     ),
-                    # Extended Thinking (for Claude)
                     rx.el.div(
                         rx.el.label(
                             "Claude Extended Thinking",
@@ -133,7 +128,7 @@ def settings_panel() -> rx.Component:
                                 rx.cond(
                                     ComparisonState.extended_thinking_enabled,
                                     "Enabled",
-                                    "Disabled"
+                                    "Disabled",
                                 ),
                                 class_name="ml-3 text-sm text-gray-700 font-medium",
                             ),
@@ -147,9 +142,9 @@ def settings_panel() -> rx.Component:
                                     class_name="text-xs font-semibold text-gray-600 mb-1 block mt-3",
                                 ),
                                 rx.select(
-                                    [str(x) for x in ComparisonState.thinking_budget_options],
-                                    value=str(ComparisonState.thinking_budget_tokens),
-                                    on_change=lambda val: ComparisonState.set_thinking_budget(int(val)),
+                                    ComparisonState.thinking_budget_options_str,
+                                    value=ComparisonState.thinking_budget_tokens.to_string(),
+                                    on_change=ComparisonState.set_thinking_budget,
                                     class_name="w-full md:w-1/2",
                                 ),
                                 class_name="mt-2",
@@ -163,15 +158,11 @@ def settings_panel() -> rx.Component:
                     ),
                     class_name="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200",
                 ),
-                
-                # Convergence Parameters Section
                 rx.el.div(
                     rx.el.h4(
                         "Convergence Parameters",
                         class_name="text-lg font-semibold text-gray-700 mb-4",
                     ),
-                    
-                    # Convergence Threshold
                     rx.el.div(
                         rx.el.label(
                             "Convergence Threshold",
@@ -184,12 +175,16 @@ def settings_panel() -> rx.Component:
                             ),
                             class_name="mb-2",
                         ),
-                        rx.slider(
-                            default_value=[ComparisonState.convergence_threshold],
+                        rx.el.input(
+                            type="range",
+                            key=ComparisonState.convergence_threshold,
+                            default_value=ComparisonState.convergence_threshold,
                             min=0.85,
                             max=0.99,
                             step=0.01,
-                            on_value_commit=ComparisonState.update_convergence_threshold,
+                            on_change=ComparisonState.update_convergence_threshold.throttle(
+                                50
+                            ),
                             class_name="w-full",
                         ),
                         rx.el.p(
@@ -198,8 +193,6 @@ def settings_panel() -> rx.Component:
                         ),
                         class_name="mb-4",
                     ),
-                    
-                    # Max Iterations
                     rx.el.div(
                         rx.el.label(
                             "Maximum Iterations",
@@ -212,12 +205,16 @@ def settings_panel() -> rx.Component:
                             ),
                             class_name="mb-2",
                         ),
-                        rx.slider(
-                            default_value=[ComparisonState.max_iterations],
+                        rx.el.input(
+                            type="range",
+                            key=ComparisonState.max_iterations,
+                            default_value=ComparisonState.max_iterations,
                             min=5,
                             max=20,
                             step=1,
-                            on_value_commit=ComparisonState.update_max_iterations,
+                            on_change=ComparisonState.update_max_iterations.throttle(
+                                50
+                            ),
                             class_name="w-full",
                         ),
                         rx.el.p(
@@ -226,8 +223,6 @@ def settings_panel() -> rx.Component:
                         ),
                         class_name="mb-4",
                     ),
-                    
-                    # Temperature
                     rx.el.div(
                         rx.el.label(
                             "Temperature",
@@ -240,12 +235,14 @@ def settings_panel() -> rx.Component:
                             ),
                             class_name="mb-2",
                         ),
-                        rx.slider(
-                            default_value=[ComparisonState.temperature],
+                        rx.el.input(
+                            type="range",
+                            key=ComparisonState.temperature,
+                            default_value=ComparisonState.temperature,
                             min=0.0,
                             max=1.0,
                             step=0.1,
-                            on_value_commit=ComparisonState.update_temperature,
+                            on_change=ComparisonState.update_temperature.throttle(50),
                             class_name="w-full",
                         ),
                         rx.el.p(
@@ -256,8 +253,6 @@ def settings_panel() -> rx.Component:
                     ),
                     class_name="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200",
                 ),
-                
-                # Current Status Summary
                 rx.el.div(
                     rx.el.h4(
                         "Current Status",
@@ -283,7 +278,6 @@ def settings_panel() -> rx.Component:
                         class_name="p-3 bg-gray-50 rounded-lg border border-gray-200",
                     ),
                 ),
-                
                 class_name="w-full max-w-6xl p-6 bg-white rounded-2xl shadow-lg border border-gray-100",
             ),
             class_name="w-full flex justify-center mb-6",
@@ -300,51 +294,7 @@ def convergence_chart() -> rx.Component:
                 "Convergence Progress",
                 class_name="text-xl font-bold text-gray-800 mb-4",
             ),
-            rx.plotly(
-                data=rx.data(
-                    [
-                        go.Scatter(
-                            x=ComparisonState.chart_iterations,
-                            y=ComparisonState.chart_similarities,
-                            mode="lines+markers",
-                            name="Similarity",
-                            line={"color": "#6366f1", "width": 3},
-                            marker={"size": 8, "color": "#6366f1"},
-                            hovertemplate="Iteration %{x}<br>Similarity: %{y:.1f}%<extra></extra>",
-                        ),
-                        go.Scatter(
-                            x=ComparisonState.chart_iterations,
-                            y=[ComparisonState.convergence_threshold * 100] * len(ComparisonState.chart_iterations),
-                            mode="lines",
-                            name="Threshold",
-                            line={"color": "#22c55e", "width": 2, "dash": "dash"},
-                            hovertemplate="Threshold: %{y:.0f}%<extra></extra>",
-                        ),
-                    ]
-                ),
-                layout={
-                    "title": None,
-                    "xaxis": {
-                        "title": "Iteration",
-                        "showgrid": True,
-                        "gridcolor": "#f3f4f6",
-                    },
-                    "yaxis": {
-                        "title": "Similarity (%)",
-                        "showgrid": True,
-                        "gridcolor": "#f3f4f6",
-                        "range": [0, 100],
-                    },
-                    "plot_bgcolor": "white",
-                    "paper_bgcolor": "white",
-                    "font": {"family": "Raleway, sans-serif"},
-                    "hovermode": "x unified",
-                    "showlegend": True,
-                    "legend": {"x": 0.02, "y": 0.98, "bgcolor": "rgba(255,255,255,0.8)"},
-                    "margin": {"l": 60, "r": 40, "t": 20, "b": 60},
-                },
-                class_name="w-full h-80",
-            ),
+            rx.plotly(data=ComparisonState.convergence_fig, class_name="w-full h-80"),
             class_name="w-full max-w-6xl p-6 bg-white rounded-2xl shadow-lg border border-gray-100 mb-8",
         ),
     )
@@ -353,7 +303,8 @@ def convergence_chart() -> rx.Component:
 def diff_viewer() -> rx.Component:
     """Renders the iteration diff viewer."""
     return rx.cond(
-        ComparisonState.show_diff_viewer & (ComparisonState.current_iteration_count > 1),
+        ComparisonState.show_diff_viewer
+        & (ComparisonState.current_iteration_count > 1),
         rx.el.div(
             rx.el.div(
                 rx.el.div(
@@ -368,17 +319,15 @@ def diff_viewer() -> rx.Component:
                     ),
                     class_name="flex items-center justify-between mb-4",
                 ),
-                
-                # Iteration selector
                 rx.el.div(
                     rx.el.label(
                         "Compare Iteration:",
                         class_name="text-sm font-semibold text-gray-700 mr-3",
                     ),
                     rx.select(
-                        [str(i) for i in range(2, ComparisonState.current_iteration_count + 1)],
-                        value=str(ComparisonState.selected_iteration_for_diff),
-                        on_change=lambda val: ComparisonState.select_iteration_for_diff(int(val)),
+                        ComparisonState.diff_iteration_options,
+                        value=ComparisonState.selected_iteration_for_diff.to_string(),
+                        on_change=ComparisonState.select_iteration_for_diff,
                         class_name="w-32",
                     ),
                     rx.el.p(
@@ -387,8 +336,6 @@ def diff_viewer() -> rx.Component:
                     ),
                     class_name="flex items-center mb-6",
                 ),
-                
-                # Diff display
                 rx.el.div(
                     rx.el.div(
                         rx.el.h4(
@@ -412,7 +359,6 @@ def diff_viewer() -> rx.Component:
                         ),
                     ),
                 ),
-                
                 class_name="w-full max-w-6xl p-6 bg-white rounded-2xl shadow-lg border border-gray-100",
             ),
             class_name="w-full flex justify-center mb-8",
@@ -426,8 +372,7 @@ def export_controls() -> rx.Component:
         ComparisonState.has_responses,
         rx.el.div(
             rx.el.h3(
-                "Export Results",
-                class_name="text-lg font-bold text-gray-800 mb-4",
+                "Export Results", class_name="text-lg font-bold text-gray-800 mb-4"
             ),
             rx.el.div(
                 rx.el.button(
@@ -558,10 +503,7 @@ def iteration_view(item: rx.Var[dict]) -> rx.Component:
         ),
         rx.el.div(
             similarity_badge(item["similarity"]),
-            rx.cond(
-                item["iteration"] > 1,
-                change_rate_badge(item["change_rate"]),
-            ),
+            rx.cond(item["iteration"] > 1, change_rate_badge(item["change_rate"])),
             class_name="flex items-center gap-4",
         ),
         class_name="flex flex-col items-center gap-4 w-full",
@@ -620,11 +562,15 @@ def iterate_button_section() -> rx.Component:
                         ),
                     ),
                     on_click=ComparisonState.iterate_manual_mode,
-                    disabled=ComparisonState.is_iterating | (ComparisonState.current_iteration_count >= ComparisonState.max_iterations),
+                    disabled=ComparisonState.is_iterating
+                    | (
+                        ComparisonState.current_iteration_count
+                        >= ComparisonState.max_iterations
+                    ),
                     class_name="px-8 py-3 bg-green-600 text-white font-semibold rounded-xl shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full max-w-xs",
                 ),
                 rx.el.div(
-                    rx.icon("check-circle", class_name="mr-3 text-green-600"),
+                    rx.icon("check_check", class_name="mr-3 text-green-600"),
                     rx.el.span(
                         f"✓ Converged! Final similarity: {ComparisonState.last_similarity_score:.1f}%",
                         class_name="text-lg font-semibold text-green-700",
@@ -677,16 +623,18 @@ def automated_controls() -> rx.Component:
                 rx.cond(
                     ComparisonState.converged,
                     rx.el.div(
-                        rx.icon("check-circle", class_name="mr-3 text-green-600 h-6 w-6"),
+                        rx.icon(
+                            "check_check", class_name="mr-3 text-green-600 h-6 w-6"
+                        ),
                         rx.el.div(
                             rx.el.span(
-                                "✓ Convergence reached!",
-                                class_name="font-bold",
+                                "✓ Convergence reached!", class_name="font-bold"
                             ),
                             rx.el.div(
                                 rx.el.span("Final similarity: "),
                                 rx.el.span(
-                                    ComparisonState.last_similarity_score.to_string() + "%",
+                                    ComparisonState.last_similarity_score.to_string()
+                                    + "%",
                                     class_name="font-bold text-green-600",
                                 ),
                                 rx.el.span(" in "),
@@ -702,18 +650,21 @@ def automated_controls() -> rx.Component:
                         class_name="flex items-center text-lg text-green-700",
                     ),
                     rx.cond(
-                        ComparisonState.current_iteration_count >= ComparisonState.max_iterations,
+                        ComparisonState.current_iteration_count
+                        >= ComparisonState.max_iterations,
                         rx.el.div(
-                            rx.icon("alert-circle", class_name="mr-3 text-yellow-600 h-6 w-6"),
+                            rx.icon(
+                                "badge_alert", class_name="mr-3 text-yellow-600 h-6 w-6"
+                            ),
                             rx.el.div(
                                 rx.el.span(
-                                    "Maximum iterations reached",
-                                    class_name="font-bold",
+                                    "Maximum iterations reached", class_name="font-bold"
                                 ),
                                 rx.el.div(
                                     rx.el.span("Final similarity: "),
                                     rx.el.span(
-                                        ComparisonState.last_similarity_score.to_string() + "%",
+                                        ComparisonState.last_similarity_score.to_string()
+                                        + "%",
                                         class_name="font-bold text-yellow-600",
                                     ),
                                     class_name="text-sm text-gray-600 mt-1",
@@ -725,8 +676,7 @@ def automated_controls() -> rx.Component:
                         rx.el.div(
                             rx.icon("info", class_name="mr-3 text-indigo-600 h-6 w-6"),
                             rx.el.span(
-                                "Automated analysis paused",
-                                class_name="font-semibold",
+                                "Automated analysis paused", class_name="font-semibold"
                             ),
                             class_name="flex items-center text-lg text-gray-700",
                         ),
@@ -745,7 +695,11 @@ def automated_controls() -> rx.Component:
                     rx.icon("play", class_name="mr-2"),
                     "Run Automation",
                     on_click=ComparisonState.run_automated_cycle,
-                    disabled=ComparisonState.converged | (ComparisonState.current_iteration_count >= ComparisonState.max_iterations),
+                    disabled=ComparisonState.converged
+                    | (
+                        ComparisonState.current_iteration_count
+                        >= ComparisonState.max_iterations
+                    ),
                     class_name="flex items-center px-6 py-2 bg-indigo-600 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed",
                 ),
             ),

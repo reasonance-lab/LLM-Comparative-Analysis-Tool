@@ -1,14 +1,10 @@
 """
 Main application entry point for LLM Cross-Talk Analyzer - Phase 2 Enhanced
 """
+
 import reflex as rx
 from app.state import ComparisonState
-from app.components import (
-    header,
-    settings_panel,
-    prompt_input_area,
-    response_area,
-)
+from app.components import header, settings_panel, prompt_input_area, response_area
 
 
 def index() -> rx.Component:

@@ -773,7 +773,6 @@ Instructions:
                 "max_tokens": self.max_tokens_claude,
                 "messages": [{"role": "user", "content": current_prompt}],
                 "temperature": self.temperature,
-                "stream": True,
             }
             if self.extended_thinking_enabled:
                 api_params["thinking"] = {
@@ -786,24 +785,28 @@ Instructions:
             @rx.event
             async def stream_and_collect():
                 nonlocal response_text, thinking_text
-                with client.messages.stream(**api_params) as stream:
-                    for event in stream:
+                async with client.messages.stream(**api_params) as stream:
+                    async for event in stream:
                         if (
                             event.type == "content_block_delta"
                             and event.delta.type == "text_delta"
                         ):
                             response_text += event.delta.text
+                            yield
                         elif event.type == "thinking_start":
                             pass
                         elif event.type == "thinking_delta":
-                            thinking_text += event.delta.thinking
+                            if hasattr(event.delta, "thinking"):
+                                thinking_text += event.delta.thinking
+                                yield
 
             await stream_and_collect()
             response_text = response_text.strip()
             if not response_text:
                 logging.warning("Claude returned an empty response.")
-                return None
-            return response_text
+                return
+            yield response_text
+            return
         except Exception as e:
             logging.exception(f"Anthropic API error: {e}")
-            return None
+            return

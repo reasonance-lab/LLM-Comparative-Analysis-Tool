@@ -16,6 +16,7 @@ import json
 from datetime import datetime
 import difflib
 import plotly.graph_objects as go
+import base64
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"

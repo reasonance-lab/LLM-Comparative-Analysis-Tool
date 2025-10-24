@@ -22,6 +22,15 @@ logging.basicConfig(
 )
 
 
+class UploadedFile(TypedDict):
+    """Type definition for an uploaded file."""
+
+    name: str
+    size: int
+    media_type: str
+    data: str
+
+
 class ModelResponse(TypedDict):
     """Type definition for a single iteration response."""
 
@@ -69,6 +78,7 @@ class ComparisonState(rx.State):
     chart_data_ready: bool = False
     openai_diff_html: str = ""
     claude_diff_html: str = ""
+    uploaded_files: list[UploadedFile] = []
     _openai_client: openai.OpenAI | None = None
     _anthropic_client: anthropic.Anthropic | None = None
 
@@ -80,6 +90,11 @@ class ComparisonState(rx.State):
             self._anthropic_client = anthropic.Anthropic(
                 api_key=os.getenv("ANTHROPIC_API_KEY")
             )
+
+    @rx.var
+    def has_uploaded_files(self) -> bool:
+        """Check if any files have been uploaded."""
+        return len(self.uploaded_files) > 0
 
     @rx.var
     def has_responses(self) -> bool:
@@ -436,6 +451,7 @@ class ComparisonState(rx.State):
         self.prompt = ""
         self.show_diff_viewer = False
         self.chart_data_ready = False
+        self.uploaded_files = []
 
     @rx.event(background=True)
     async def get_initial_responses(self, form_data: dict):
@@ -443,8 +459,11 @@ class ComparisonState(rx.State):
         async with self:
             self.prompt = form_data.get("prompt", "")
             if not self.prompt or not self.prompt.strip():
-                yield rx.toast.error("Please enter a prompt.", duration=3000)
-                return
+                if not self.uploaded_files:
+                    yield rx.toast.error(
+                        "Please enter a prompt or upload a file.", duration=3000
+                    )
+                    return
             self.is_loading = True
             self.is_iterating = False
             self.automated_running = False
@@ -453,8 +472,8 @@ class ComparisonState(rx.State):
             self.chart_data_ready = False
             self._initialize_clients()
         try:
-            openai_task = self._fetch_openai(self.prompt)
-            claude_task = self._fetch_claude(self.prompt)
+            openai_task = self._fetch_openai(self.prompt, self.uploaded_files)
+            claude_task = self._fetch_claude(self.prompt, self.uploaded_files)
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
             if openai_res is None or claude_res is None:
                 async with self:
@@ -527,8 +546,8 @@ Instructions:
                 other_model_response=openai_previous,
             )
         try:
-            openai_task = self._fetch_openai(openai_new_prompt)
-            claude_task = self._fetch_claude(claude_new_prompt)
+            openai_task = self._fetch_openai(openai_new_prompt, self.uploaded_files)
+            claude_task = self._fetch_claude(claude_new_prompt, self.uploaded_files)
             openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
             async with self:
                 if openai_res is None or claude_res is None:
@@ -649,8 +668,8 @@ Instructions:
                     other_model_response=openai_previous,
                 )
             try:
-                openai_task = self._fetch_openai(openai_new_prompt)
-                claude_task = self._fetch_claude(claude_new_prompt)
+                openai_task = self._fetch_openai(openai_new_prompt, self.uploaded_files)
+                claude_task = self._fetch_claude(claude_new_prompt, self.uploaded_files)
                 openai_res, claude_res = await asyncio.gather(openai_task, claude_task)
                 if openai_res is None or claude_res is None:
                     async with self:
@@ -725,17 +744,69 @@ Instructions:
             return 0.0
         return float(numerator) / denominator
 
-    async def _fetch_openai(self, current_prompt: str) -> str | None:
+    @rx.event
+    async def handle_upload(self, files: list[rx.UploadFile]):
+        """Handle file uploads."""
+        if not files:
+            return
+        for file in files:
+            try:
+                upload_data = await file.read()
+                base64_data = base64.b64encode(upload_data).decode("utf-8")
+                self.uploaded_files.append(
+                    {
+                        "name": file.name,
+                        "size": len(upload_data),
+                        "media_type": file.content_type,
+                        "data": base64_data,
+                    }
+                )
+            except Exception as e:
+                logging.exception(f"Error reading file {file.name}: {e}")
+                yield rx.toast.error(f"Error processing {file.name}")
+
+    @rx.event
+    def remove_file(self, filename: str):
+        """Remove a file from the uploaded list."""
+        self.uploaded_files = [f for f in self.uploaded_files if f["name"] != filename]
+
+    @rx.event
+    def clear_files(self):
+        """Clear all uploaded files."""
+        self.uploaded_files = []
+
+    async def _fetch_openai(
+        self, current_prompt: str, files: list[UploadedFile]
+    ) -> str | None:
         """Helper to fetch response from OpenAI using Responses API."""
         client = cast(openai.OpenAI, self._openai_client)
         try:
             system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
+            content_parts = []
+            if current_prompt:
+                content_parts.append({"type": "input_text", "text": current_prompt})
+            for file in files:
+                if file["media_type"].startswith("image/"):
+                    content_parts.append(
+                        {
+                            "type": "input_image",
+                            "image_url": f"data:{file['media_type']};base64,{file['data']}",
+                        }
+                    )
+                elif file["media_type"] == "application/pdf":
+                    content_parts.append(
+                        {
+                            "type": "input_file",
+                            "filename": file["name"],
+                            "file_data": f"data:application/pdf;base64,{file['data']}",
+                        }
+                    )
             response = await asyncio.to_thread(
                 client.responses.create,
                 model=self.openai_model,
                 input=[
                     {"role": "system", "content": system_message},
-                    {"role": "user", "content": current_prompt},
+                    {"role": "user", "content": content_parts},
                 ],
                 reasoning={"effort": self.reasoning_effort, "summary": "auto"},
                 store=True,
@@ -756,22 +827,53 @@ Instructions:
             logging.exception(f"OpenAI API error: {e}")
             return None
 
-    async def _fetch_claude(self, current_prompt: str) -> str | None:
+    async def _fetch_claude(
+        self, current_prompt: str, files: list[UploadedFile]
+    ) -> str | None:
         """Helper to fetch response from Anthropic Claude with optional extended thinking."""
         client = cast(anthropic.Anthropic, self._anthropic_client)
         try:
             return await asyncio.to_thread(
-                self._execute_claude_stream, current_prompt, client
+                self._execute_claude_stream, current_prompt, files, client
             )
         except Exception as e:
             logging.exception(f"Anthropic API error: {e}")
             return None
 
     def _execute_claude_stream(
-        self, current_prompt: str, client: anthropic.Anthropic
+        self,
+        current_prompt: str,
+        files: list[UploadedFile],
+        client: anthropic.Anthropic,
     ) -> str | None:
         """Synchronously executes the Claude stream and collects the response."""
         system_message = "You are a helpful assistant. Your goal is to collaborate with another AI to converge on a single, optimal response. Focus on substance and accuracy over stylistic differences."
+        content_parts = []
+        for file in files:
+            if file["media_type"].startswith("image/"):
+                content_parts.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": file["media_type"],
+                            "data": file["data"],
+                        },
+                    }
+                )
+            elif file["media_type"] == "application/pdf":
+                content_parts.append(
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": file["data"],
+                        },
+                    }
+                )
+        if current_prompt:
+            content_parts.append({"type": "text", "text": current_prompt})
         api_params = {
             "model": self.claude_model,
             "system": [
@@ -782,7 +884,7 @@ Instructions:
                 }
             ],
             "max_tokens": self.max_tokens_claude,
-            "messages": [{"role": "user", "content": current_prompt}],
+            "messages": [{"role": "user", "content": content_parts}],
             "temperature": self.temperature,
         }
         response_text = ""

@@ -429,17 +429,31 @@ def export_controls() -> rx.Component:
 
 
 def prompt_input_area() -> rx.Component:
-    """Renders the prompt input form with mode selector."""
+    """Renders the prompt input form with mode selector and file upload."""
     return rx.el.div(
         rx.cond(~ComparisonState.is_loading, mode_selector()),
         rx.el.form(
-            rx.el.textarea(
-                name="prompt",
-                placeholder="Enter your prompt here to begin the analysis...",
-                class_name="w-full p-4 rounded-xl border-2 border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow duration-200 resize-none text-base font-medium",
-                rows=4,
+            rx.el.div(
+                rx.el.textarea(
+                    name="prompt",
+                    placeholder="Enter your prompt here, or drop files below...",
+                    class_name="w-full p-4 rounded-xl border-2 border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow duration-200 resize-none text-base font-medium",
+                    rows=4,
+                ),
+                file_upload_area(),
+                class_name="flex flex-col gap-4",
             ),
             rx.el.div(
+                rx.cond(
+                    ComparisonState.has_uploaded_files,
+                    rx.el.button(
+                        rx.icon("circle_x", class_name="mr-2 h-4 w-4"),
+                        "Clear Files",
+                        on_click=ComparisonState.clear_files,
+                        class_name="flex items-center text-sm font-semibold text-gray-600 hover:text-red-600 transition-colors",
+                        type="button",
+                    ),
+                ),
                 rx.el.button(
                     rx.icon("play", class_name="mr-2"),
                     "Generate",
@@ -447,13 +461,88 @@ def prompt_input_area() -> rx.Component:
                     class_name="flex items-center justify-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed",
                     disabled=ComparisonState.is_loading,
                 ),
-                class_name="flex items-center justify-end mt-3",
+                class_name="flex items-center justify-between mt-3",
             ),
             on_submit=ComparisonState.get_initial_responses,
             reset_on_submit=True,
             class_name="w-full",
         ),
         class_name="w-full max-w-4xl p-6 bg-white rounded-2xl shadow-lg border border-gray-100 flex flex-col gap-4",
+    )
+
+
+def file_upload_area() -> rx.Component:
+    """Component for uploading files with previews."""
+    return rx.el.div(
+        rx.upload.root(
+            rx.el.div(
+                rx.icon("cloud_upload", class_name="w-10 h-10 text-gray-400"),
+                rx.el.p(
+                    "Drag & drop files here, or click to select files",
+                    class_name="text-sm text-gray-500 font-medium",
+                ),
+                class_name="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer",
+            ),
+            id="upload_area",
+            accept={
+                "image/png": [".png"],
+                "image/jpeg": [".jpg", ".jpeg"],
+                "image/gif": [".gif"],
+                "image/webp": [".webp"],
+                "application/pdf": [".pdf"],
+            },
+            multiple=True,
+            max_files=5,
+            on_drop=ComparisonState.handle_upload(
+                rx.upload_files(upload_id="upload_area")
+            ),
+            class_name="w-full",
+        ),
+        rx.cond(
+            ComparisonState.has_uploaded_files,
+            rx.el.div(
+                rx.el.h4(
+                    "Uploaded Files",
+                    class_name="text-sm font-semibold text-gray-700 mb-2",
+                ),
+                rx.foreach(ComparisonState.uploaded_files, uploaded_file_card),
+                class_name="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4",
+            ),
+        ),
+        class_name="flex flex-col w-full",
+    )
+
+
+def uploaded_file_card(file: rx.Var[dict]) -> rx.Component:
+    """Displays a card for an uploaded file."""
+    return rx.el.div(
+        rx.cond(
+            file["media_type"].contains("image"),
+            rx.el.img(
+                src=f"data:{file['media_type']};base64,{file['data']}",
+                class_name="w-full h-24 object-cover rounded-t-lg",
+            ),
+            rx.el.div(
+                rx.icon("file-text", class_name="w-10 h-10 text-gray-500"),
+                class_name="flex items-center justify-center w-full h-24 bg-gray-100 rounded-t-lg",
+            ),
+        ),
+        rx.el.div(
+            rx.el.p(
+                file["name"], class_name="text-xs font-medium text-gray-800 truncate"
+            ),
+            rx.el.p(
+                (file["size"] / 1024).to_string() + " KB",
+                class_name="text-xs text-gray-500",
+            ),
+            class_name="p-2",
+        ),
+        rx.el.button(
+            rx.icon("x", class_name="w-3 h-3"),
+            on_click=lambda: ComparisonState.remove_file(file["name"]),
+            class_name="absolute top-1 right-1 p-1 bg-white/50 rounded-full text-gray-600 hover:bg-white hover:text-red-500 transition-all",
+        ),
+        class_name="relative bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow",
     )
 
 
@@ -826,7 +915,7 @@ def placeholder_card() -> rx.Component:
             class_name="text-xl font-semibold text-gray-600 mb-2",
         ),
         rx.el.p(
-            "Enter a prompt above to start the comparison.",
+            "Enter a prompt or upload files to start the comparison.",
             class_name="text-gray-500 font-medium",
         ),
         class_name="flex flex-col items-center justify-center p-12 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl text-center w-full",

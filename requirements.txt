@@ -5,3 +5,4 @@ PyGithub
 openai
 together
 plotly
+httpx

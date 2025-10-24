@@ -17,6 +17,7 @@ from datetime import datetime
 import difflib
 import plotly.graph_objects as go
 import base64
+import httpx
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -86,7 +87,10 @@ class ComparisonState(rx.State):
     def _initialize_clients(self):
         """Initializes API clients if they don't exist."""
         if self._openai_client is None:
-            self._openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            self._openai_client = openai.OpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                timeout=httpx.Timeout(600.0, read=600.0, write=10.0, connect=5.0),
+            )
         if self._anthropic_client is None:
             self._anthropic_client = anthropic.Anthropic(
                 api_key=os.getenv("ANTHROPIC_API_KEY")
